@@ -674,8 +674,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     startDriverPolling();
                 }
 
-                // Start polling for passenger
-                if (role === 'PASSENGER' && ['REQUESTED', 'ASSIGNED', 'ONGOING'].includes(ride.status)) {
+                // Start polling for passenger (Added COMPLETED/PAID for payment recovery)
+                if (role === 'PASSENGER' && ['REQUESTED', 'ASSIGNED', 'ONGOING', 'COMPLETED', 'PAID'].includes(ride.status)) {
                     startPassengerPolling(ride.id);
                 }
             } else {
@@ -2511,5 +2511,47 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log("Window loaded, initializing Rajbari locations...");
         setTimeout(populateRouteUpazilas, 500); // Small delay to ensure everything is parsed
     });
+
+    // --- Polling Logic (Appended) ---
+    let passengerPollInterval = null;
+
+    window.startPassengerPolling = function (rideId) {
+        if (passengerPollInterval) clearInterval(passengerPollInterval);
+        console.log("Starting Passenger Polling for Ride:", rideId);
+
+        passengerPollInterval = setInterval(async () => {
+            const token = localStorage.getItem('token');
+            try {
+                const res = await fetch('/api/rides/current/', {
+                    headers: { 'Authorization': `Token ${token}` }
+                });
+                if (res.ok) {
+                    const ride = await res.json();
+                    // Check if status changed
+                    if (ride.id === rideId) {
+                        // Update UI via existing handler
+                        updateRideStatus(ride.status, ride);
+
+                        // Stop polling if fully finished
+                        if (['FINISHED', 'CANCELLED'].includes(ride.status)) {
+                            stopPassengerPolling();
+                        }
+                    } else {
+                        stopPassengerPolling();
+                    }
+                } else if (res.status === 404) {
+                    stopPassengerPolling();
+                }
+            } catch (e) { console.error("Passenger polling error", e); }
+        }, 4000);
+    };
+
+    window.stopPassengerPolling = function () {
+        if (passengerPollInterval) {
+            clearInterval(passengerPollInterval);
+            passengerPollInterval = null;
+            console.log("Stopped Passenger Polling.");
+        }
+    };
 
 });
