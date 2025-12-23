@@ -882,6 +882,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 connectWebSocket(details.id, token, isDriverUser);
             }
 
+            // CRITICAL FIX: Start polling for payment status (fallback for WebSocket)
+            if (isDriver && details.id) {
+                console.log('[Payment Polling] Starting payment status polling for driver');
+                startPaymentPolling(details.id);
+            }
+
             if (isDriver) {
                 if (jobStatusText) jobStatusText.innerText = "Trip Completed. Waiting for payment.";
                 if (jobActiveControls) jobActiveControls.style.display = 'flex';
@@ -996,6 +1002,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function cleanupLiveTracking() {
         stopSendingLocation();
+        // Stop payment polling if active
+        stopPaymentPolling();
+
+        // Close socket
+        if (rideSocket) {
+            rideSocket.close();
+            rideSocket = null;
+        }
         if (driverMarker) { map.removeLayer(driverMarker); driverMarker = null; }
         if (passengerMarker) { map.removeLayer(passengerMarker); passengerMarker = null; }
     }
@@ -1604,6 +1618,50 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // === PAYMENT POLLING (Fallback for WebSocket) ===
+    let paymentPollingInterval = null;
+
+    function startPaymentPolling(rideId) {
+        // Clear any existing polling
+        if (paymentPollingInterval) {
+            clearInterval(paymentPollingInterval);
+        }
+
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        console.log('[Payment Polling] Starting to check for cash payments every 2 seconds');
+
+        paymentPollingInterval = setInterval(async () => {
+            try {
+                const res = await fetch('/api/rides/current/', {
+                    headers: { 'Authorization': `Token ${token}` }
+                });
+
+                if (res.ok) {
+                    const ride = await res.json();
+                    console.log('[Payment Polling] Current ride status:', ride.status);
+
+                    // If status changed from COMPLETED, update UI
+                    if (ride.status !== 'COMPLETED') {
+                        console.log('[Payment Polling] Status changed! Updating UI to:', ride.status);
+                        updateRideStatus(ride.status, ride);
+                        stopPaymentPolling();
+                    }
+                }
+            } catch (e) {
+                console.error('[Payment Polling] Error:', e);
+            }
+        }, 2000); // Check every 2 seconds
+    }
+
+    function stopPaymentPolling() {
+        if (paymentPollingInterval) {
+            console.log('[Payment Polling] Stopping payment polling');
+            clearInterval(paymentPollingInterval);
+            paymentPollingInterval = null;
+        }
+    }
 
     // ===== CHAT SYSTEM =====
     let currentChatRideId = null;
