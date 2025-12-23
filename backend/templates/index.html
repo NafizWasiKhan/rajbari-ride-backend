@@ -1,0 +1,658 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+<!-- Header/Navigation -->
+<div class="header"
+    style="position: absolute; top: 16px; left: 16px; right: 16px; z-index: 1000; display: flex; justify-content: space-between; align-items: center;">
+    <div class="logo-badge"
+        style="background: white; padding: 8px 16px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); font-weight: 800; font-size: 18px;">
+        <i class="fas fa-bolt" style="color: #f1c40f;"></i> Rajbari Ride (National)
+    </div>
+    <button id="auth-status-btn" class="control-btn" style="width: auto; padding: 0 16px; border-radius: 20px;">
+        <i class="fas fa-user"></i> Login
+    </button>
+</div>
+
+<div id="map" class="map-container"></div>
+
+<div class="map-controls" id="map-controls">
+    <button class="control-btn" id="locate-btn" title="Locate Me">
+        <i class="fas fa-location-arrow"></i>
+    </button>
+    <!-- Driver Toggle (Only for DRIVERs, hidden by default) -->
+    <button class="control-btn" id="online-toggle-btn" style="display: none; background: #e74c3c; color: white;"
+        title="Go Online">
+        <i class="fas fa-power-off"></i>
+    </button>
+</div>
+
+<!-- Rajbari Location Selector -->
+<div id="rajbari-location-selector"
+    style="position: absolute; top: 70px; left: 16px; z-index: 1000; background: white; padding: 12px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 240px; transition: all 0.3s ease;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; cursor: pointer;"
+        onclick="toggleLocationPanel()">
+        <span style="font-weight: 700; font-size: 13px; color: #333;"><i class="fas fa-route"
+                style="color: #e67e22;"></i> Plan Trip (Rajbari)</span>
+        <i id="loc-panel-icon" class="fas fa-chevron-down" style="color: #888; font-size: 12px;"></i>
+    </div>
+
+    <div id="loc-panel-content" style="display: none; flex-direction: column; gap: 12px;">
+
+        <!-- Pickup Section -->
+        <div style="background: #fdfdfd; padding: 8px; border-radius: 8px; border: 1px solid #eee;">
+            <p style="font-size: 11px; font-weight: 700; color: #27ae60; margin-bottom: 6px;"><i class="fas fa-circle"
+                    style="font-size: 8px;"></i> Pickup</p>
+            <select id="pickup-upazila" class="form-select" onchange="loadUnionList('pickup')"
+                style="padding: 6px; border-radius: 6px; border: 1px solid #ddd; font-size: 11px; width: 100%; margin-bottom: 4px;">
+                <option value="">Select Upazila</option>
+            </select>
+            <select id="pickup-union" class="form-select" onchange="updateLocation('pickup')" disabled
+                style="padding: 6px; border-radius: 6px; border: 1px solid #ddd; font-size: 11px; width: 100%; margin-bottom: 4px; background: #fafafa;">
+                <option value="">Select Union</option>
+            </select>
+            <div style="position: relative;">
+                <input type="text" id="pickup-village" placeholder="Village / Area" disabled
+                    style="width: 100%; padding: 6px; border-radius: 6px; border: 1px solid #ddd; font-size: 11px; background: #fafafa;">
+                <button onclick="updateLocation('pickup')"
+                    style="position: absolute; right: 2px; top: 2px; bottom: 2px; border: none; background: #27ae60; color: white; border-radius: 4px; padding: 0 6px; cursor: pointer;">
+                    <i class="fas fa-check"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Drop Section -->
+        <div style="background: #fdfdfd; padding: 8px; border-radius: 8px; border: 1px solid #eee;">
+            <p style="font-size: 11px; font-weight: 700; color: #e74c3c; margin-bottom: 6px;"><i
+                    class="fas fa-map-marker-alt" style="font-size: 8px;"></i> Drop-off</p>
+            <select id="drop-upazila" class="form-select" onchange="loadUnionList('drop')"
+                style="padding: 6px; border-radius: 6px; border: 1px solid #ddd; font-size: 11px; width: 100%; margin-bottom: 4px;">
+                <option value="">Select Upazila</option>
+            </select>
+            <select id="drop-union" class="form-select" onchange="updateLocation('drop')" disabled
+                style="padding: 6px; border-radius: 6px; border: 1px solid #ddd; font-size: 11px; width: 100%; margin-bottom: 4px; background: #fafafa;">
+                <option value="">Select Union</option>
+            </select>
+            <div style="position: relative;">
+                <input type="text" id="drop-village" placeholder="Village / Area" disabled
+                    style="width: 100%; padding: 6px; border-radius: 6px; border: 1px solid #ddd; font-size: 11px; background: #fafafa;">
+                <button onclick="updateLocation('drop')"
+                    style="position: absolute; right: 2px; top: 2px; bottom: 2px; border: none; background: #e74c3c; color: white; border-radius: 4px; padding: 0 6px; cursor: pointer;">
+                    <i class="fas fa-check"></i>
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Passenger/Common Bottom Sheet -->
+<div class="bottom-sheet" id="bottom-sheet">
+    <div class="drag-handle"></div>
+    <div class="sheet-content">
+        <div id="passenger-dashboard">
+            <!-- Stats Summary -->
+            <div id="passenger-stats"
+                style="display: none; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;">
+                <div
+                    style="background: #f8f9fa; padding: 12px; border-radius: 12px; text-align: center; border: 1px solid #eee;">
+                    <p style="font-size: 11px; color: #666; text-transform: uppercase;">Total Spent</p>
+                    <p id="total-spent" style="font-size: 18px; font-weight: 800; color: #27ae60;">0 BDT</p>
+                </div>
+                <div
+                    style="background: #f8f9fa; padding: 12px; border-radius: 12px; text-align: center; border: 1px solid #eee;">
+                    <p style="font-size: 11px; color: #666; text-transform: uppercase;">Trips</p>
+                    <p id="total-passenger-trips" style="font-size: 18px; font-weight: 800;">0</p>
+                </div>
+            </div>
+
+            <div id="live-location-badge"
+                style="display: none; align-items: center; gap: 8px; background: rgba(46, 204, 113, 0.1); color: #2ecc71; padding: 8px 16px; border-radius: 20px; font-size: 11px; font-weight: 700; margin-bottom: 12px; border: 1px solid rgba(46, 204, 113, 0.2); width: fit-content;">
+                <span class="pulse-dot"></span>
+                LIVE LOCATION: <span id="location-sharing-status">SHARING ACTIVE</span>
+            </div>
+
+            <div id="live-location-controls" style="display: none; margin-bottom: 15px;">
+                <button id="toggle-location-btn" class="btn btn-secondary btn-sm" onclick="toggleLocationSharing()"
+                    style="border-radius: 20px; font-size: 11px; padding: 6px 15px; border: 1px solid #ddd;">
+                    <i class="fas fa-location-arrow"></i> STOP SHARING
+                </button>
+            </div>
+
+            <div id="ride-info">
+                <h2 id="sheet-title">Plan your Ride</h2>
+                <div id="fare-display"
+                    style="display: none; background: #eef7f2; color: #27ae60; padding: 12px; border-radius: 12px; margin-bottom: 12px; font-weight: 800; text-align: center;">
+                    Estimated Fare: <span id="fare-amount">0.00</span> BDT
+                </div -->
+
+                <!-- Passenger Stats Card (Hidden by default) -->
+                <div id="passenger-stats-card" style="display: none; margin-bottom: 20px; cursor: pointer;"
+                    onclick="showTransactionsModal()">
+                    <div
+                        style="background: #f0f7ff; padding: 16px; border-radius: 16px; border: 1px solid #d0e3ff; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                        <div>
+                            <p
+                                style="font-size: 11px; color: #3498db; text-transform: uppercase; font-weight: 700; margin: 0;">
+                                Total Spent</p>
+                            <p id="p-stats-spent"
+                                style="font-size: 18px; font-weight: 800; color: #2c3e50; margin: 4px 0 0 0;">0 BDT</p>
+                        </div>
+                        <div style="text-align: right;">
+                            <p
+                                style="font-size: 11px; color: #3498db; text-transform: uppercase; font-weight: 700; margin: 0;">
+                                Trips</p>
+                            <p id="p-stats-count"
+                                style="font-size: 18px; font-weight: 800; color: #2c3e50; margin: 4px 0 0 0;">0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="address-summary"
+                    style="display: none; margin-bottom: 20px; background: white; padding: 16px; border-radius: 12px; border: 1px solid #eee;">
+                    <p style="font-size: 13px; color: #666; margin-bottom: 8px;">
+                        <i class="fas fa-circle-dot" style="color: #2ecc71; width: 16px;"></i>
+                        <strong>From:</strong> <span id="sum-pickup-addr" style="color: #333;">Selecting...</span>
+                    </p>
+                    <p style="font-size: 13px; color: #666; margin: 0;">
+                        <i class="fas fa-location-pin" style="color: #e74c3c; width: 16px;"></i>
+                        <strong>To:</strong> <span id="sum-drop-addr" style="color: #333;">Selecting...</span>
+                    </p>
+                </div>
+
+                <div id="status-container"
+                    style="display: none; margin-bottom: 20px; padding: 16px; background: rgba(0,0,0,0.05); border-radius: 12px; border: 1px solid rgba(0,0,0,0.1);">
+                    <p
+                        style="font-weight: 600; font-size: 11px; color: #666; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">
+                        Trip Status</p>
+                    <p id="ride-status-text" style="font-size: 18px; font-weight: 800; color: #1a1a1a; margin: 0;">
+                        Finding
+                        Driver...</p>
+                </div>
+
+                <div id="driver-info"
+                    style="display: none; margin-bottom: 20px; padding: 12px; border: 1px solid rgba(0,0,0,0.1); border-radius: 12px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div
+                                style="width: 44px; height: 44px; background: #eee; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                <i class="fas fa-user-circle" style="font-size: 24px; color: #999;"></i>
+                            </div>
+                            <div>
+                                <p id="driver-name" style="font-weight: 700; font-size: 15px; margin: 0;">Driver Name
+                                </p>
+                                <p id="vehicle-info" style="font-size: 13px; color: #888; margin: 0;">White Toyota
+                                    Corolla</p>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button id="chat-with-driver-btn" class="btn btn-secondary btn-sm"
+                                style="width: 36px; height: 36px; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center;">
+                                <i class="fas fa-comment"></i>
+                            </button>
+                            <a id="driver-call-link" href="#"
+                                style="width: 36px; height: 36px; background: #f8f9fa; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #27ae60; text-decoration: none;">
+                                <i class="fas fa-phone"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button id="request-ride-btn" class="btn btn-primary" onclick="handleRideRequest()">Request
+                    Ride</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                <button class="btn btn-secondary" onclick="showScheduledRides()" style="margin: 0;">
+                    <i class="far fa-calendar-alt"></i> Schedule
+                </button>
+                <button class="btn btn-secondary" onclick="showRideHistory()"
+                    style="margin: 0; background: #95a5a6; color: white; border: none;">
+                    <i class="fas fa-history"></i> History
+                </button>
+            </div>
+            <!-- Dynamic Passenger Grid -->
+            <div id="passenger-dynamic-grid"
+                style="display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 10px;">
+                <button id="finish-trip-btn" class="btn btn-primary"
+                    style="display: none; background: #e67e22; margin: 0;" onclick="handleFinishRide()">
+                    <i class="fas fa-flag-checkered"></i> Finish Trip
+                </button>
+                <button id="pay-now-btn" class="btn btn-primary" style="display: none; background: #27ae60; margin: 0;"
+                    onclick="handlePayment()">
+                    <i class="fas fa-wallet"></i> Pay Now
+                </button>
+                <button id="my-requests-btn" class="btn btn-secondary" onclick="showMyRequests()"
+                    style="width: 100%; margin: 0; background: #e67e22; color: white; border: none;">
+                    <i class="fas fa-list"></i> My Requests
+                </button>
+            </div>
+
+            <button class="btn btn-secondary" onclick="showInbox()"
+                style="width: 100%; margin: 0; background: #3498db; color: white; border: none;">
+                <i class="fas fa-envelope"></i> Messages
+            </button>
+            <button class="btn btn-secondary" onclick="resetSelection()"
+                style="margin-top: 10px; background: transparent; color: #888;">Clear Map</button>
+        </div>
+    </div>
+
+    <!-- Scheduled Rides UI -->
+    <div id="scheduled-rides-dashboard" style="display: none;">
+        <!-- ... existing content ... -->
+
+        <h2 style="margin-bottom: 16px;">
+            <button onclick="backToDashboard()"
+                style="border: none; background: none; cursor: pointer; margin-right: 8px;">
+                <i class="fas fa-arrow-left"></i>
+            </button>
+            Scheduled Rides
+        </h2>
+        <div id="scheduled-rides-list" style="margin-bottom: 20px; max-height: 40vh; overflow-y: auto;">
+            <p style="text-align: center; color: #888; padding: 20px;">Loading rides...</p>
+        </div>
+
+        <div id="driver-schedule-controls" style="display: none; padding-top: 16px; border-top: 1px solid #eee;">
+            <button class="btn btn-primary" onclick="showCreateScheduleModal()">
+                <i class="fas fa-plus"></i> Post a Future Ride
+            </button>
+        </div>
+    </div>
+
+    <div id="driver-dashboard" style="display: none;">
+        <h2 style="margin-bottom: 16px;">Driver Dashboard</h2>
+
+        <!-- Earnings Summary Card -->
+        <div id="driver-stats-card"
+            style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; cursor: pointer;"
+            onclick="showTransactionsModal()">
+            <div style="background: #eef7f2; padding: 16px; border-radius: 16px; border: 1px solid #d4ecd9;">
+                <p style="font-size: 11px; color: #27ae60; text-transform: uppercase; font-weight: 700; margin: 0;">
+                    Total Income</p>
+                <p id="stats-total-income"
+                    style="font-size: 18px; font-weight: 800; color: #1e8449; margin: 4px 0 0 0;">0 BDT</p>
+            </div>
+            <div style="background: #f8f9fa; padding: 16px; border-radius: 16px; border: 1px solid #eee;">
+                <p style="font-size: 11px; color: #666; text-transform: uppercase; font-weight: 700; margin: 0;">Wallet
+                    Balance</p>
+                <p id="stats-wallet-balance" style="font-size: 18px; font-weight: 800; color: #333; margin: 4px 0 0 0;">
+                    0 BDT</p>
+            </div>
+        </div>
+
+        <div id="active-job-info"
+            style="margin-bottom: 20px; padding: 20px; background: #fff; border: 1px solid #eee; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+                <span id="availability-status-badge"
+                    style="background: #e74c3c; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;">Offline</span>
+                <i class="fas fa-car-side" style="color: #ddd; font-size: 20px;"></i>
+            </div>
+
+            <p id="job-status-text" style="font-size: 15px; font-weight: 600; color: #333; line-height: 1.4;">Go
+                online to see ride requests from passengers.</p>
+
+            <div id="job-active-controls"
+                style="display: none; margin-top: 20px; padding-top: 16px; border-top: 1px solid #eee; display: flex; gap: 10px;">
+                <button id="job-chat-btn" class="btn btn-secondary"
+                    style="flex: 1; background: #3498db; color: white; border: none;">
+                    <i class="fas fa-comment"></i> Chat with Rider
+                </button>
+                <button id="job-finish-btn" class="btn btn-primary" style="flex: 1; background: #e67e22;">Finish
+                    Ride</button>
+                <button id="job-confirm-finish-btn" class="btn btn-primary"
+                    style="flex: 1; background: #27ae60; display: none;">Confirm & Close</button>
+            </div>
+        </div>
+
+        <div class="action-buttons">
+            <button id="job-accept-btn" class="btn btn-primary" style="display: none;">Accept Ride</button>
+
+            <button class="btn btn-primary" onclick="showAvailableRequests()"
+                style="width: 100%; margin: 0 0 10px 0; background: #2ecc71; color: white; border: none; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <i class="fas fa-list-ul"></i> Available Requests
+                <span id="available-count"
+                    style="background: white; color: #2ecc71; padding: 2px 8px; border-radius: 10px; font-size: 12px; display: none;">0</span>
+            </button>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                <button class="btn btn-secondary" onclick="showScheduledRides()" style="margin: 0;">
+                    <i class="far fa-calendar-alt"></i> Schedules
+                </button>
+                <button class="btn btn-secondary" onclick="showRideHistory()" style="margin: 0;">
+                    <i class="fas fa-history"></i> History
+                </button>
+            </div>
+            <button class="btn btn-secondary" onclick="showInbox()"
+                style="width: 100%; margin: 0; background: #3498db; color: white; border: none;">
+                <i class="fas fa-envelope"></i> Messages
+            </button>
+        </div>
+    </div>
+</div>
+</div>
+
+<!-- Simple Modal for Creating Schedule (Hidden) -->
+<div id="create-schedule-modal"
+    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 4000; align-items: center; justify-content: center;">
+    <div style="background: white; padding: 24px; border-radius: 16px; width: 90%; max-width: 400px;">
+        <h3>Create Scheduled Ride</h3>
+        <p style="font-size: 13px; color: #666; margin-bottom: 16px;">Select pickup/drop on map first, then fill this.
+        </p>
+        <div style="margin-bottom: 12px;">
+            <label style="display: block; font-weight: 600; margin-bottom: 4px;">Departure Time</label>
+            <input type="datetime-local" id="sched-time"
+                style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ddd;">
+        </div>
+        <div style="margin-bottom: 20px;">
+            <label style="display: block; font-weight: 600; margin-bottom: 4px;">Available Seats</label>
+            <input type="number" id="sched-seats" value="1" min="1" max="4"
+                style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ddd;">
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn btn-primary" onclick="submitScheduledRide()">Post Ride</button>
+            <button class="btn btn-secondary" onclick="hideCreateScheduleModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Request Management Modal -->
+<div id="requests-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+        <h3 style="margin-bottom: 20px;">Manage Join Requests</h3>
+        <div id="requests-list" style="max-height: 300px; overflow-y: auto; margin-bottom: 20px;">
+            <!-- Requests populated by JS -->
+        </div>
+        <button class="btn btn-secondary" onclick="hideRequestsModal()" style="width: 100%;">Close</button>
+    </div>
+</div>
+
+<!-- Join Confirmation Modal -->
+<div id="join-confirmation-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+        <h3 style="margin-bottom: 20px;">Confirm Join</h3>
+        <p id="join-ride-details" style="font-size: 14px; color: #666; margin-bottom: 20px;">How many seats do you need?
+        </p>
+        <div style="margin-bottom: 24px;">
+            <input type="number" id="seats-to-request" value="1" min="1" max="4"
+                style="width: 100%; padding: 14px; border: 1px solid #eee; border-radius: 12px; font-size: 16px;">
+        </div>
+        <div style="display: flex; gap: 12px;">
+            <button id="confirm-join-btn" class="btn btn-primary" style="flex: 1;">Confirm Join</button>
+            <button class="btn btn-secondary" onclick="hideJoinModal()" style="flex: 1;">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Available Requests Modal -->
+<div id="available-requests-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="height: 80vh; max-height: 600px; padding: 0; display: flex; flex-direction: column;">
+        <div
+            style="padding: 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; background: #2ecc71; color: white;">
+            <h3 style="margin: 0;">Available Ride Requests</h3>
+            <button class="btn btn-secondary btn-sm" onclick="hideAvailableRequestsModal()"
+                style="width: auto; padding: 5px 10px; background: transparent; border: none; color: white; font-size: 20px;">&times;</button>
+        </div>
+        <div id="available-requests-list" style="flex: 1; overflow-y: auto; padding: 16px;">
+            <p style="text-align: center; color: #888; padding: 20px;">Loading requests...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Payment Method Modal -->
+<div id="payment-method-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+        <h3 style="margin-bottom: 8px;">Select Payment Method</h3>
+        <p style="font-size: 14px; color: #666; margin-bottom: 24px;">How would you like to pay for this ride?</p>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px;">
+            <!-- bKash -->
+            <div onclick="selectPaymentMethod('DEMO')"
+                style="cursor: pointer; padding: 16px; border-radius: 12px; border: 2px solid #e2136e; background: #fff5f8; text-align: center; transition: all 0.2s;">
+                <i class="fas fa-mobile-screen" style="font-size: 24px; color: #e2136e; margin-bottom: 8px;"></i>
+                <p style="margin: 0; font-weight: 700; color: #e2136e;">bKash</p>
+            </div>
+            <!-- Nagad -->
+            <div onclick="selectPaymentMethod('DEMO')"
+                style="cursor: pointer; padding: 16px; border-radius: 12px; border: 2px solid #f7941d; background: #fffbf5; text-align: center; transition: all 0.2s;">
+                <i class="fas fa-money-bill-transfer" style="font-size: 24px; color: #f7941d; margin-bottom: 8px;"></i>
+                <p style="margin: 0; font-weight: 700; color: #f7941d;">Nagad</p>
+            </div>
+            <!-- Rocket -->
+            <div onclick="selectPaymentMethod('DEMO')"
+                style="cursor: pointer; padding: 16px; border-radius: 12px; border: 2px solid #8c3494; background: #f9f2fa; text-align: center; transition: all 0.2s;">
+                <i class="fas fa-bolt" style="font-size: 24px; color: #8c3494; margin-bottom: 8px;"></i>
+                <p style="margin: 0; font-weight: 700; color: #8c3494;">Rocket</p>
+            </div>
+            <!-- Bank -->
+            <div onclick="selectPaymentMethod('DEMO')"
+                style="cursor: pointer; padding: 16px; border-radius: 12px; border: 2px solid #3498db; background: #f2f8fc; text-align: center; transition: all 0.2s;">
+                <i class="fas fa-university" style="font-size: 24px; color: #3498db; margin-bottom: 8px;"></i>
+                <p style="margin: 0; font-weight: 700; color: #3498db;">Bank</p>
+            </div>
+            <!-- Hand Cash -->
+            <div onclick="selectPaymentMethod('CASH')"
+                style="grid-column: span 2; cursor: pointer; padding: 16px; border-radius: 12px; border: 2px solid #27ae60; background: #f2faf5; text-align: center; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 12px;">
+                <i class="fas fa-hand-holding-dollar" style="font-size: 24px; color: #27ae60;"></i>
+                <p style="margin: 0; font-weight: 700; color: #27ae60; font-size: 16px;">Hand Cash (Pay Directly)</p>
+            </div>
+        </div>
+
+        <!-- Cash Amount Input Area -->
+        <div id="cash-amount-container"
+            style="display: none; margin-bottom: 16px; background: #f8f9fa; padding: 16px; border-radius: 12px; border: 1px solid #eee;">
+            <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #444;">Amount paid to driver
+                (BDT):</label>
+            <input type="number" id="cash-amount-input" placeholder="e.g. 500"
+                style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; font-weight: 700; color: #2ecc71;">
+            <p style="font-size: 11px; color: #888; margin-top: 6px;">
+                <i class="fas fa-info-circle"></i> Driver will verify this amount.
+            </p>
+            <button id="confirm-cash-btn" class="btn btn-primary" onclick="confirmCashPayment()"
+                style="width: 100%; margin-top: 12px; background: #27ae60; padding: 12px; border-radius: 10px; border: none; font-weight: 700;">
+                Confirm Payment
+            </button>
+        </div>
+
+        <button class="btn btn-secondary" onclick="hidePaymentMethodModal()"
+            style="width: 100%; border: none; background: #f1f1f1;">Cancel</button>
+    </div>
+</div>
+
+<!-- Transactions Modal -->
+<div id="transactions-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="height: 80vh; max-height: 600px; padding: 0; display: flex; flex-direction: column;">
+        <div
+            style="padding: 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; background: #3498db; color: white; border-radius: 20px 20px 0 0;">
+            <h3 style="margin: 0;">Income & Expenses</h3>
+            <button onclick="hideTransactionsModal()"
+                style="background: none; border: none; color: white; font-size: 20px; cursor: pointer;">&times;</button>
+        </div>
+        <div id="transactions-list" style="flex: 1; overflow-y: auto; padding: 16px; background: #f8f9fa;">
+            <p style="text-align: center; color: #888; padding: 20px;">No recent activities.</p>
+        </div>
+    </div>
+</div>
+
+<!-- History Modal -->
+<div id="history-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="height: 80vh; max-height: 600px; padding: 0; display: flex; flex-direction: column;">
+        <div
+            style="padding: 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="margin: 0;">Ride History</h3>
+            <button class="btn btn-secondary btn-sm" onclick="hideHistoryModal()"
+                style="width: auto; padding: 5px 10px;">&times;</button>
+        </div>
+        <div id="history-list" style="flex: 1; overflow-y: auto; padding: 16px;">
+            <p style="text-align: center; color: #888; padding: 20px;">No rides yet.</p>
+        </div>
+    </div>
+</div>
+
+<!-- Chat Modal -->
+<div id="chat-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="display: flex; flex-direction: column; height: 80vh; max-height: 600px; padding: 0;">
+        <div
+            style="padding: 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
+            <h3 id="chat-title" style="margin: 0;">Chat</h3>
+            <button class="btn btn-secondary btn-sm" onclick="closeChat()"
+                style="width: auto; padding: 5px 10px;">&times;</button>
+        </div>
+        <div id="chat-messages"
+            style="flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px;">
+            <!-- Messages populated by JS -->
+        </div>
+        <div style="padding: 16px; border-top: 1px solid #eee; display: flex; gap: 8px;">
+            <input type="text" id="chat-input" placeholder="Type a message..."
+                style="flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 12px;">
+            <button class="btn btn-primary btn-sm" onclick="sendMessage()"
+                style="width: auto; padding: 0 20px;">Send</button>
+        </div>
+    </div>
+</div>
+</div>
+</div>
+
+<!-- My Requests Modal -->
+<div id="my-requests-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="height: 80vh; max-height: 600px; padding: 0; display: flex; flex-direction: column;">
+        <div
+            style="padding: 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; background: #e67e22; color: white;">
+            <h3 style="margin: 0;">My Ride Requests</h3>
+            <button class="btn btn-secondary btn-sm" onclick="hideMyRequestsModal()"
+                style="width: auto; padding: 5px 10px; background: transparent; border: none; color: white; font-size: 20px;">&times;</button>
+        </div>
+        <div id="my-requests-list" style="flex: 1; overflow-y: auto; padding: 16px;">
+            <p style="text-align: center; color: #888; padding: 20px;">Loading requests...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Request Ride Confirmation Modal -->
+<div id="request-ride-modal"
+    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 4000; align-items: center; justify-content: center;">
+    <div style="background: white; padding: 24px; border-radius: 16px; width: 90%; max-width: 400px;">
+        <h3 style="margin-bottom: 16px;">Confirm Your Ride</h3>
+
+        <div style="background: #f8f9fa; padding: 12px; border-radius: 12px; margin-bottom: 16px;">
+            <p style="font-size: 13px; color: #666; margin-bottom: 4px;"><strong>From:</strong> <span
+                    id="req-pickup-addr">...</span></p>
+            <p style="font-size: 13px; color: #666; margin-bottom: 8px;"><strong>To:</strong> <span
+                    id="req-drop-addr">...</span></p>
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #ddd; padding-top: 8px;">
+                <span style="font-weight: 600;">Est. Fare:</span>
+                <span id="req-fare-display" style="font-weight: 800; color: #27ae60; font-size: 18px;">0 BDT</span>
+            </div>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+            <label style="display: block; font-weight: 600; margin-bottom: 8px;">Select Vehicle Preference</label>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+                <label
+                    style="cursor: pointer; border: 1px solid #eee; padding: 8px; border-radius: 8px; text-align: center;">
+                    <input type="radio" name="req-vehicle" value="" checked>
+                    <div style="font-size: 20px; margin-bottom: 4px;">🚗</div>
+                    <div style="font-size: 11px;">Any</div>
+                </label>
+                <label
+                    style="cursor: pointer; border: 1px solid #eee; padding: 8px; border-radius: 8px; text-align: center;">
+                    <input type="radio" name="req-vehicle" value="1"> <!-- Assuming ID 1 is Car/Premium -->
+                    <div style="font-size: 20px; margin-bottom: 4px;">🚙</div>
+                    <div style="font-size: 11px;">Car</div>
+                </label>
+                <label
+                    style="cursor: pointer; border: 1px solid #eee; padding: 8px; border-radius: 8px; text-align: center;">
+                    <input type="radio" name="req-vehicle" value="2"> <!-- ID 2 Bike -->
+                    <div style="font-size: 20px; margin-bottom: 4px;">🏍️</div>
+                    <div style="font-size: 11px;">Bike</div>
+                </label>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+            <button class="btn btn-primary" onclick="confirmRideRequest()">Confirm Request</button>
+            <button class="btn btn-secondary" onclick="hideRequestModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Map Preview Controls (Generic) -->
+<div id="map-preview-controls"
+    style="display: none; position: absolute; top: 110px; left: 50%; transform: translateX(-50%); z-index: 3500; width: 90%; max-width: 400px; background: white; padding: 16px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); flex-direction: column; gap: 10px;">
+    <div
+        style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 8px;">
+        <span style="font-weight: 800; color: #333;">Ride Preview</span>
+        <span id="preview-fare"
+            style="font-weight: 700; color: #27ae60; background: #eef7f2; padding: 4px 8px; border-radius: 8px;">0
+            BDT</span>
+    </div>
+    <p id="preview-route-info" style="font-size: 13px; color: #666; margin-bottom: 12px; line-height: 1.4;">
+        <strong>From:</strong> ... <br> <strong>To:</strong> ...
+    </p>
+    <div style="display: flex; gap: 10px;">
+        <button id="preview-back-btn" class="btn btn-secondary" onclick="closePreviewMode()"
+            style="flex: 1; background: #95a5a6; color: white;">Back</button>
+        <button id="preview-accept-btn" class="btn btn-primary" style="flex: 2; background: #2ecc71;">Accept
+            Ride</button>
+    </div>
+</div>
+
+<!-- Auth Modal -->
+<div id="auth-modal"
+    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 3000; align-items: center; justify-content: center; backdrop-filter: blur(8px);">
+    <div
+        style="background: white; width: 90%; max-width: 400px; padding: 32px; border-radius: 24px; position: relative;">
+        <button onclick="Auth.hideModal()"
+            style="position: absolute; right: 20px; top: 20px; border: none; background: none; font-size: 20px; cursor: pointer;">&times;</button>
+
+        <div id="login-form">
+            <h2 style="margin-bottom: 8px;">Welcome back</h2>
+            <p style="color: #666; margin-bottom: 24px;">Login to your account</p>
+            <form onsubmit="handleLoginSubmit(event)">
+                <input type="text" name="username" placeholder="Username" required autocomplete="username"
+                    style="width: 100%; padding: 14px; margin-bottom: 12px; border: 1px solid #eee; border-radius: 12px;">
+                <input type="password" name="password" placeholder="Password" required autocomplete="current-password"
+                    style="width: 100%; padding: 14px; margin-bottom: 20px; border: 1px solid #eee; border-radius: 12px;">
+                <button type="submit" class="btn btn-primary">Login</button>
+            </form>
+            <p style="margin-top: 20px; text-align: center; font-size: 14px;">Don't have an account? <a href="#"
+                    onclick="toggleAuthTab('signup')" style="color: black; font-weight: 700;">Sign up</a></p>
+        </div>
+
+        <div id="signup-form" style="display: none;">
+            <h2 style="margin-bottom: 8px;">Create account</h2>
+            <p style="color: #666; margin-bottom: 24px;">Join the ride community</p>
+            <form onsubmit="handleSignupSubmit(event)">
+                <input type="text" name="username" placeholder="Username" required autocomplete="username"
+                    style="width: 100%; padding: 14px; margin-bottom: 12px; border: 1px solid #eee; border-radius: 12px;">
+                <input type="email" name="email" placeholder="Email" required autocomplete="email"
+                    style="width: 100%; padding: 14px; margin-bottom: 12px; border: 1px solid #eee; border-radius: 12px;">
+                <input type="password" name="password" placeholder="Password" required autocomplete="new-password"
+                    style="width: 100%; padding: 14px; margin-bottom: 12px; border: 1px solid #eee; border-radius: 12px;">
+                <input type="text" name="phone_number" placeholder="Phone Number (e.g. 017...)" required
+                    autocomplete="tel"
+                    style="width: 100%; padding: 14px; margin-bottom: 16px; border: 1px solid #eee; border-radius: 12px;">
+
+                <p style="font-size: 13px; font-weight: 600; color: #666; margin-bottom: 8px;">I WANT TO BE A:</p>
+                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <label
+                        style="flex: 1; text-align: center; border: 1px solid #eee; padding: 12px; border-radius: 12px; cursor: pointer;">
+                        <input type="radio" name="role" value="RIDER" checked style="margin-right: 6px;">Passenger
+                    </label>
+                    <label
+                        style="flex: 1; text-align: center; border: 1px solid #eee; padding: 12px; border-radius: 12px; cursor: pointer;">
+                        <input type="radio" name="role" value="DRIVER" style="margin-right: 6px;">Driver
+                    </label>
+                </div>
+                <button type="submit" class="btn btn-primary">Sign Up</button>
+            </form>
+            <p style="margin-top: 20px; text-align: center; font-size: 14px;">Already have an account? <a href="#"
+                    onclick="toggleAuthTab('login')" style="color: black; font-weight: 700;">Login</a></p>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/auth.js"></script>
+{% endblock %}

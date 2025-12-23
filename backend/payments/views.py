@@ -1,0 +1,199 @@
+from django.shortcuts import get_object_or_404, redirect
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework import status
+from django.urls import reverse
+
+from .models import Payment
+from rides.models import Ride
+from .gateways.factory import PaymentGatewayFactory
+from .services.payment_service import PaymentService
+
+class InitiatePaymentView(APIView):
+    """
+    Kicks off the payment process using the configured gateway.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        ride_id = request.data.get('ride_id')
+        ride = get_object_or_404(Ride, id=ride_id, rider=request.user)
+        
+        if ride.status != 'COMPLETED':
+            return Response({"error": "Ride must be COMPLETED before payment."}, 
+                            status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check for existing completed payment
+        existing = Payment.objects.filter(ride=ride, status='COMPLETED').first()
+        if existing:
+            return Response({"error": "Ride already paid."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 1. Get Gateway Provider (Demo/bKash/CASH)
+        method = request.data.get('method', 'DEMO')
+        try:
+            gateway = PaymentGatewayFactory.get_gateway(method)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 2. Local Record (Pending)
+        amount_paid = request.data.get('amount_paid', ride.estimated_fare)
+        payment, _ = Payment.objects.update_or_create(
+            ride=ride,
+            defaults={
+                'amount': amount_paid,
+                'status': 'PENDING',
+                'provider': getattr(gateway, 'provider_name', 'DEMO')
+            }
+        )
+
+        # 3. Initiate with Provider
+        init_data = gateway.initiate_payment(
+            float(amount_paid), 
+            ride.id, 
+            request.user.email or f"{request.user.username}@example.com"
+        )
+
+        if init_data.get('status') == 'SUCCESS':
+            # Update local record with provider's transaction ID if available
+            if init_data.get('transaction_id'):
+                payment.transaction_id = init_data['transaction_id']
+                payment.save()
+            
+            # Broadcast PAID status early for CASH to notify driver immediately
+            if method == 'CASH':
+                from channels.layers import get_channel_layer
+                from asgiref.sync import async_to_sync
+                layer = get_channel_layer()
+                async_to_sync(layer.group_send)(
+                    f"ride_{ride.id}",
+                    {
+                        "type": "ride_status_update",
+                        "status": "PAID",
+                        "ride_id": ride.id,
+                        "amount_paid": float(amount_paid)
+                    }
+                )
+
+            # If it's CASH, we can just finalize right here
+            if method == 'CASH':
+                PaymentService.process_payment_success(payment.id)
+                return Response({
+                    "status": "SUCCESS", 
+                    "message": "Cash payment recorded. Ride finished!",
+                    "is_cash": True
+                }, status=status.HTTP_200_OK)
+            
+            return Response({"checkout_url": init_data.get('payment_url')}, status=status.HTTP_200_OK)
+        
+        return Response({"error": init_data.get('message', 'Initiation failed')}, 
+                        status=status.HTTP_400_BAD_REQUEST)
+
+class PaymentCallbackView(APIView):
+    """
+    Global callback handler for all payment providers.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        # We handle GET for demo/simple redirects, POST for real webhooks
+        return self.handle_callback(request.query_params)
+
+    def post(self, request):
+        return self.handle_callback(request.data)
+
+    def handle_callback(self, data):
+        gateway = PaymentGatewayFactory.get_gateway()
+        verification = gateway.verify_payment(data)
+
+        if verification.get('status') == 'SUCCESS':
+            # Success logic
+            trx_id = verification.get('transaction_id')
+            payment = get_object_or_404(Payment, transaction_id=trx_id)
+            
+            # Use PaymentService to handle business logic (commissions, wallets, statuses)
+            PaymentService.process_payment_success(payment.id)
+            
+            return Response({"status": "SUCCESS", "message": "Payment processed."}, status=status.HTTP_200_OK)
+        
+        return Response({"status": "FAILED", "message": verification.get('message')}, 
+                        status=status.HTTP_400_BAD_REQUEST)
+
+class DemoPaymentCallbackView(APIView):
+    """
+    Specific endpoint for the Demo (fake) flow to simulate a user 
+    being redirected back from a gateway.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        ride_id = request.query_params.get('ride_id')
+        trx_id = request.query_params.get('trxID')
+        
+        # In a real app, this would be a frontend success page
+        # For this demo, let's just trigger the callback logic directly
+        gateway = PaymentGatewayFactory.get_gateway()
+        verification = gateway.verify_payment(request.query_params)
+        
+        if verification.get('status') == 'SUCCESS':
+            payment = get_object_or_404(Payment, transaction_id=trx_id)
+            PaymentService.process_payment_success(payment.id)
+            return Response({
+                "message": "DEMO PAYMENT SUCCESS!",
+                "details": f"Ride #{ride_id} is now PAID. Driver wallet updated and commission deducted."
+            })
+        
+        return Response({"error": "Payment failed"}, status=status.HTTP_400_BAD_REQUEST)
+
+class WalletStatsView(APIView):
+    """
+    Returns wallet balance, total earnings, total spent, and recent transaction history.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .models import Wallet, Transaction
+        from django.db.models import Sum
+        
+        user = request.user
+        wallet, _ = Wallet.objects.get_or_create(user=user)
+        
+        # Get transaction totals
+        total_earnings = Transaction.objects.filter(
+            wallet=wallet, 
+            transaction_type='EARNING'
+        ).aggregate(Sum('amount'))['amount__sum'] or 0
+        
+        # For passengers, we track total spent in RIDE_PAYMENT (negative amounts in transaction records usually, or positive depending on implementation plan)
+        # Looking at previous implementation, EARNING is positive, COMMISSION is negative.
+        # User requested "total spend", so we sum payments.
+        
+        # In actual system, we should probably have a 'PAYMENT' transaction type for riders.
+        # Currently, PaymentService only creates COMMISSION and EARNING for the driver.
+        # Let's check how payments are recorded for the rider... 
+        # Actually, the Transaction model has 'RIDE_PAYMENT' type. Let's ensure it's used or calculated.
+        
+        # fallback to sum of completed payments for this user as rider
+        from .models import Payment
+        total_spent = Payment.objects.filter(
+            ride__rider=user, 
+            status='COMPLETED'
+        ).aggregate(Sum('amount'))['amount__sum'] or 0
+
+        # Recent activities (last 20)
+        recent = Transaction.objects.filter(wallet=wallet).order_by('-timestamp')[:20]
+        history = [{
+            "id": t.id,
+            "type": t.transaction_type,
+            "amount": float(t.amount),
+            "description": t.description,
+            "timestamp": t.timestamp.isoformat(),
+            "ride_id": t.ride_id if t.ride else None
+        } for t in recent]
+
+        return Response({
+            "balance": float(wallet.balance),
+            "total_earnings": float(total_earnings),
+            "total_spent": float(total_spent),
+            "history": history
+        })
