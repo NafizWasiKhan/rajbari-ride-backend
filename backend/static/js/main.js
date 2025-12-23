@@ -408,14 +408,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 if (res.ok) {
                     const ride = await res.json();
-                    if (ride.status === 'ASSIGNED' || ride.status === 'ONGOING' || ride.status === 'COMPLETED') {
+                    const activeStatuses = ['ASSIGNED', 'ONGOING', 'COMPLETED', 'PAID', 'FINISHED'];
+                    if (activeStatuses.includes(ride.status)) {
                         updateRideStatus(ride.status, ride);
-                        // If assigned, we can stop polling heavily, maybe switch to lighter polling or rely on user action
-                        if (ride.status === 'ASSIGNED') {
-                            clearInterval(passengerPollInterval); // Stop polling once assigned? Or keep for ongoing?
-                            // Actually, let's keep polling for ONGOING/COMPLETED updates if WS fails
-                        }
-                        if (ride.status === 'COMPLETED') {
+
+                        // Stop polling only when finished or cancelled
+                        if (ride.status === 'FINISHED' || ride.status === 'CANCELLED') {
                             clearInterval(passengerPollInterval);
                         }
                     }
@@ -569,6 +567,14 @@ document.addEventListener('DOMContentLoaded', () => {
             scheduleControls.style.display = token ? 'block' : 'none';
         }
 
+        // Restore view if saved
+        const lastView = localStorage.getItem('currentView');
+        if (lastView === 'SCHEDULED_RIDES') {
+            window.showScheduledRides();
+        } else if (lastView === 'AVAILABLE_REQUESTS') {
+            window.showAvailableRequests();
+        }
+
         if (token) {
             checkActiveRide();
         }
@@ -647,9 +653,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             if (response.ok) {
                 const isOnline = data.is_online;
-                btn.style.background = isOnline ? '#2ecc71' : '#e74c3c';
-                statusText.innerText = isOnline ? 'Online' : 'Offline';
-                statusText.style.color = isOnline ? '#2ecc71' : '#e74c3c';
+                if (btn) btn.style.background = isOnline ? '#2ecc71' : '#e74c3c';
+
+                if (statusText) {
+                    statusText.innerText = isOnline ? 'Online' : 'Offline';
+                    statusText.style.color = isOnline ? '#2ecc71' : '#e74c3c';
+                }
 
                 // Update global currentUser state and trigger UI refreshing
                 if (currentUser) currentUser.profile.is_online = isOnline;
@@ -668,7 +677,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         startDriverPolling(); // Start polling when online
                     } else {
                         jobText.innerText = "Go online to see ride requests from passengers.";
-                        document.getElementById('job-accept-btn').style.display = 'none';
+                        const acceptBtn = document.getElementById('job-accept-btn');
+                        if (acceptBtn) acceptBtn.style.display = 'none';
                         stopDriverPolling(); // Stop polling when offline
                     }
                 }
@@ -697,8 +707,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const jobActiveControls = document.getElementById('job-active-controls');
         const dynamicGrid = document.getElementById('passenger-dynamic-grid');
 
+        // Robust role detection
+        const storedRole = localStorage.getItem('userRole');
+        const isDriver = storedRole === 'DRIVER' || (currentUser && currentUser.profile && currentUser.profile.role === 'DRIVER');
+
         // Force hide request button if any active ride status exists
-        const isActive = ['ASSIGNED', 'ONGOING', 'COMPLETED'].includes(status);
+        const isActive = ['ASSIGNED', 'ONGOING', 'COMPLETED', 'PAID'].includes(status);
         if (isActive && requestRideBtn) {
             requestRideBtn.style.display = 'none';
 
@@ -719,34 +733,55 @@ document.addEventListener('DOMContentLoaded', () => {
         const confirmBtn = document.getElementById('job-confirm-finish-btn');
         if (confirmBtn) confirmBtn.style.display = 'none';
 
-        if (status === 'ASSIGNED') {
-            text.innerText = "Driver is on the way!";
-            if (driverInfo) driverInfo.style.display = "block";
-            if (finishTripBtn) finishTripBtn.style.display = "block"; // Show early as per user preference
-            document.getElementById('driver-name').innerText = details.driver_name || "Driver";
-            if (requestRideBtn) requestRideBtn.style.display = 'none';
+        if (status === 'ASSIGNED' || status === 'ONGOING') {
+            if (isDriver) {
+                if (jobStatusText) {
+                    jobStatusText.innerHTML = status === 'ASSIGNED' ?
+                        '<i class="fas fa-car-side"></i> Navigate to pickup location.' :
+                        '<i class="fas fa-route"></i> Trip in progress. Navigate to destination.';
+                }
+                if (jobActiveControls) jobActiveControls.style.display = 'flex';
 
-            // Setup Chat & Call for Passenger
-            const chatBtn = document.getElementById('chat-with-driver-btn');
-            if (chatBtn && details.id && details.driver) {
-                chatBtn.style.display = 'flex';
-                chatBtn.onclick = () => openChat(details.id, details.driver, details.driver_name || 'Driver');
+                const chatBtn = document.getElementById('job-chat-btn');
+                const finishBtn = document.getElementById('job-finish-btn');
+
+                const riderId = details.rider || details.rider_id;
+                const rideId = details.id || details.ride_id;
+                const riderName = details.rider_username || 'Rider';
+
+                if (chatBtn && rideId && riderId) {
+                    console.log("[Chat] Binding Driver Chat:", rideId, riderId);
+                    chatBtn.onclick = () => openChat(rideId, riderId, riderName);
+                } else if (chatBtn) {
+                    console.warn("[Chat] Driver Chat binding failed: missing IDs", { rideId, riderId });
+                }
+
+                if (finishBtn && rideId) {
+                    finishBtn.onclick = () => finishRide(rideId);
+                }
+            } else {
+                if (text) text.innerText = status === 'ASSIGNED' ? "Driver is on the way!" : "Ride in progress...";
+                if (driverInfo) driverInfo.style.display = "block";
+                if (finishTripBtn) finishTripBtn.style.display = "block";
+                if (requestRideBtn) requestRideBtn.style.display = 'none';
+
+                // Setup Chat & Call for Passenger
+                const chatBtn = document.getElementById('chat-with-driver-btn');
+                const dId = details.driver || details.driver_id;
+                const rideId = details.id || details.ride_id;
+
+                if (chatBtn && rideId && dId) {
+                    chatBtn.style.display = 'flex';
+                    chatBtn.onclick = () => openChat(rideId, dId, details.driver_name || 'Driver');
+                }
             }
 
-            // Add vehicle and rating info
-            const vehicleInfo = document.getElementById('vehicle-info');
-            if (vehicleInfo) {
-                const model = details.driver_car_model || "Toyota Corolla";
-                const color = details.driver_car_color || "White";
-                const plate = details.driver_plate_number || "RAJ-123";
-                const rating = details.driver_rating ? `⭐ ${details.driver_rating}` : "⭐ 5.0";
-                vehicleInfo.innerText = `${color} ${model} | ${plate} (${rating})`;
-            }
-            if (details.lat && details.lng) {
+            // Sync maps and markers (mostly for Passenger)
+            if (!isDriver && details.lat && details.lng) {
                 updateDriverMarker(details.lat, details.lng);
             }
 
-            // Ensure route is drawn (for both driver and rider reloads)
+            // Draw route if missing
             if (details.pickup_lat && details.drop_lat) {
                 const p = { lat: parseFloat(details.pickup_lat), lng: parseFloat(details.pickup_lng) };
                 const d = { lat: parseFloat(details.drop_lat), lng: parseFloat(details.drop_lng) };
@@ -757,19 +792,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-        } else if (status === 'ONGOING') {
-            text.innerText = "Ride in progress...";
-            if (driverInfo) driverInfo.style.display = "block";
-            if (finishTripBtn) finishTripBtn.style.display = "block";
-            if (requestRideBtn) requestRideBtn.style.display = 'none';
-            if (jobStatusText) jobStatusText.innerText = "Trip in progress. Navigate to destination.";
         } else if (status === 'COMPLETED') {
-            text.innerText = "Arrived! Please pay the fare.";
-            if (payNowBtn) payNowBtn.style.display = "block";
-            if (finishTripBtn) finishTripBtn.style.display = 'none';
-            if (requestRideBtn) requestRideBtn.style.display = 'none';
-            if (jobStatusText) jobStatusText.innerText = "Trip Completed. Waiting for payment.";
-            cleanupLiveTracking();
+            if (isDriver) {
+                if (jobStatusText) jobStatusText.innerText = "Trip Completed. Waiting for payment.";
+                if (jobActiveControls) jobActiveControls.style.display = 'flex';
+            } else {
+                if (text) text.innerText = "Arrived! Please pay the fare.";
+                if (payNowBtn) payNowBtn.style.display = "block";
+                if (finishTripBtn) finishTripBtn.style.display = 'none';
+            }
+            // Do NOT cleanup here, we need to wait for payment confirmation
         } else if (status === 'PAID') {
             const isDriver = currentUser && currentUser.profile.role === 'DRIVER';
 
@@ -807,12 +839,21 @@ document.addEventListener('DOMContentLoaded', () => {
             // Do NOT cleanup yet! We stay in PAID until driver confirms.
 
         } else if (status === 'FINISHED') {
-            text.innerText = "Ride Finished! Thank you.";
+            if (text) text.innerText = "Ride Finished! Thank you.";
             if (payNowBtn) payNowBtn.style.display = "none";
             if (requestRideBtn) requestRideBtn.style.display = 'block';
             if (driverInfo) driverInfo.style.display = 'none';
             if (jobActiveControls) jobActiveControls.style.display = 'none';
 
+            // Hide the active status container to show main dashboard
+            if (statusContainer) {
+                setTimeout(() => {
+                    statusContainer.style.display = 'none';
+                    if (text) text.innerText = 'Where to go?';
+                }, 3000);
+            }
+
+            RideState.clear();
             cleanupLiveTracking();
             setTimeout(resetSelection, 3000);
 
@@ -843,7 +884,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Scheduled Rides Flow ---
     window.showScheduledRides = async function () {
+        localStorage.setItem('currentView', 'SCHEDULED_RIDES');
         document.getElementById('passenger-dashboard').style.display = 'none';
+        document.getElementById('driver-dashboard').style.display = 'none';
         document.getElementById('scheduled-rides-dashboard').style.display = 'block';
 
         const listContainer = document.getElementById('scheduled-rides-list');
@@ -859,10 +902,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             listContainer.innerHTML = rides.map(ride => {
-                const isOffer = ride.ride_type === 'OFFER';
+                const isOffer = ride.ride_type === 'OFFER' || !!ride.driver;
                 const creator = isOffer ? ride.driver_username : ride.rider_username;
                 const badgeColor = isOffer ? '#2ecc71' : '#3498db';
                 const badgeText = isOffer ? 'DRIVER OFFER' : 'PASSENGER REQUEST';
+                const otherUserId = ride.driver || ride.rider;
 
                 return `
                     <div style="background: white; padding: 16px; border-radius: 12px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
@@ -886,7 +930,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                         <a href="tel:${ride.creator_phone}" class="btn btn-primary btn-sm" style="background: #27ae60; font-size: 11px; padding: 4px 8px; width: auto;">
                                             <i class="fas fa-phone"></i> Call
                                         </a>
-                                        <button class="btn btn-primary btn-sm" onclick="openChat(${ride.id}, ${ride.driver || ride.rider}, '${ride.driver_username || ride.rider_username}')" style="background: #3498db; font-size: 11px; padding: 4px 8px; width: auto;">
+                                        <button class="btn btn-primary btn-sm" onclick="openChat(${ride.id}, ${otherUserId}, '${creator}')" style="background: #3498db; font-size: 11px; padding: 4px 8px; width: auto;">
                                             <i class="fas fa-comment"></i> Chat
                                         </button>
                                         <a href="https://wa.me/${ride.creator_phone}" target="_blank" class="btn btn-primary btn-sm" style="background: #25D366; font-size: 11px; padding: 4px 8px; width: auto;">
@@ -983,6 +1027,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     window.backToDashboard = function () {
+        localStorage.removeItem('currentView');
         document.getElementById('scheduled-rides-dashboard').style.display = 'none';
         initDashboard();
     };
@@ -1260,6 +1305,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function cleanupLiveTracking() {
+        console.log("[Cleanup] Tearing down live tracking and map overlays...");
+        stopSendingLocation();
+        if (rideSocket) {
+            rideSocket.close();
+            rideSocket = null;
+        }
+        if (pickupMarker) { map.removeLayer(pickupMarker); pickupMarker = null; }
+        if (dropMarker) { map.removeLayer(dropMarker); dropMarker = null; }
+        if (driverMarker) { map.removeLayer(driverMarker); driverMarker = null; }
+        if (passengerMarker) { map.removeLayer(passengerMarker); passengerMarker = null; }
+        if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+        if (routingControl) { map.removeControl(routingControl); routingControl = null; }
+    }
+
     window.handleFinishRide = async function () {
         const token = localStorage.getItem('token');
         try {
@@ -1384,7 +1444,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentChatOtherName = null;
 
     window.openChat = function (rideId, otherId, otherName) {
-        console.log('[Chat] Opening chat for ride:', rideId);
+        console.log('[Chat] Opening chat for ride:', rideId, 'with user:', otherId);
         currentChatRideId = rideId;
         currentChatOtherId = otherId;
         currentChatOtherName = otherName;
@@ -1394,7 +1454,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (modal) modal.style.display = 'flex';
         if (title) title.innerText = `Chat with ${otherName}`;
 
-        loadChatMessages(rideId);
+        loadChatMessages(rideId, otherId);
         startPolling();
     };
 
@@ -1407,13 +1467,21 @@ document.addEventListener('DOMContentLoaded', () => {
         currentChatOtherName = null;
     };
 
-    async function loadChatMessages(rideId) {
+    async function loadChatMessages(rideId, otherUserId = null) {
         const token = localStorage.getItem('token');
         const messagesDiv = document.getElementById('chat-messages');
         if (!messagesDiv) return;
 
+        // Use currentChatOtherId if not provided
+        const targetOtherId = otherUserId || currentChatOtherId;
+
         try {
-            const res = await fetch(`/api/chat/messages/${rideId}/`, {
+            let url = `/api/rides/messages/?ride_id=${rideId}`;
+            if (targetOtherId) {
+                url += `&other_user_id=${targetOtherId}`;
+            }
+
+            const res = await fetch(url, {
                 headers: { 'Authorization': `Token ${token}` }
             });
             if (res.ok) {
@@ -1445,7 +1513,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return `
                 <div style="display:flex;justify-content:${align};margin-bottom:8px;">
                     <div style="background:${bg};color:${color};padding:10px 14px;border-radius:12px;max-width:70%;word-wrap:break-word;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
-                        <p style="margin:0;font-size:14px;">${msg.message}</p>
+                        <p style="margin:0;font-size:14px;">${msg.content}</p>
                         <p style="margin:4px 0 0 0;font-size:10px;opacity:0.7;">${new Date(msg.timestamp).toLocaleTimeString()}</p>
                     </div>
                 </div>
@@ -1468,15 +1536,17 @@ document.addEventListener('DOMContentLoaded', () => {
         input.value = '';
 
         try {
-            const res = await fetch(`/api/chat/send/`, {
+            // Using correct backend endpoint and field names
+            const res = await fetch(`/api/rides/messages/send/`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Token ${token}`
                 },
                 body: JSON.stringify({
-                    ride_id: currentChatRideId,
-                    message: message
+                    ride: currentChatRideId,
+                    receiver: currentChatOtherId,
+                    content: message
                 })
             });
 
@@ -1485,7 +1555,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 loadChatMessages(currentChatRideId);
             } else {
                 input.value = originalMsg;
-                alert('Message send failed');
+                const errData = await res.json();
+                alert(errData.error || 'Message send failed');
             }
         } catch (e) {
             console.error('[Chat] Send error', e);
@@ -1502,7 +1573,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function startPolling() {
         clearInterval(chatInterval);
         chatInterval = setInterval(() => {
-            if (currentChatRideId) loadChatMessages(currentChatRideId);
+            if (currentChatRideId) loadChatMessages(currentChatRideId, currentChatOtherId);
         }, 3000);
     }
 
@@ -1772,6 +1843,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.hideInboxModal = () => document.getElementById('inbox-modal').style.display = 'none';
 
     window.showAvailableRequests = async function (providedRides = null) {
+        localStorage.setItem('currentView', 'AVAILABLE_REQUESTS');
         const token = localStorage.getItem('token');
         if (!token) return;
 
@@ -1835,10 +1907,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
             `).join('');
-        } catch (e) { list.innerHTML = 'Error loading requests'; }
+        } catch (e) {
+            console.error("Available requests load fail", e);
+            list.innerHTML = '<p style="color: red; text-align: center; padding: 20px;">Failed to load available requests. Please try again.</p>';
+        }
     };
 
-    window.hideAvailableRequestsModal = () => document.getElementById('available-requests-modal').style.display = 'none';
+    window.updateAvailableCount = async function () {
+        const token = localStorage.getItem('token');
+        const countEl = document.getElementById('available-count');
+        if (!token || !countEl) return;
+
+        try {
+            const res = await fetch('/api/rides/available/', {
+                headers: { 'Authorization': `Token ${token}` }
+            });
+            if (res.ok) {
+                const rides = await res.json();
+                countEl.innerText = rides.length;
+                countEl.style.display = rides.length > 0 ? 'inline-block' : 'none';
+            }
+        } catch (e) {
+            console.error("Update available count failed", e);
+        }
+    };
+
+    window.hideAvailableRequestsModal = () => {
+        localStorage.removeItem('currentView');
+        document.getElementById('available-requests-modal').style.display = 'none';
+    };
 
     // Request Notification permission on first interaction
     document.addEventListener('click', () => {

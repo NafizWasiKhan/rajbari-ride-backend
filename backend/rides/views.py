@@ -207,12 +207,12 @@ class ScheduledRideCreateView(generics.CreateAPIView):
         serializer.save(**save_kwargs)
 
 class ScheduledRideListView(generics.ListAPIView):
-    queryset = Ride.objects.filter(is_scheduled=True, scheduled_datetime__gt=timezone.now())
+    queryset = Ride.objects.filter(is_scheduled=True, scheduled_datetime__gt=timezone.now() - timezone.timedelta(hours=1))
     serializer_class = RideSerializer
     permission_classes = [AllowAny]
     
     def get_queryset(self):
-        return Ride.objects.filter(is_scheduled=True, scheduled_datetime__gt=timezone.now(), available_seats__gt=0)
+        return Ride.objects.filter(is_scheduled=True, scheduled_datetime__gt=timezone.now() - timezone.timedelta(hours=1), available_seats__gt=0)
 
 class RequestSeatView(generics.CreateAPIView):
     serializer_class = ScheduledRideRequestSerializer
@@ -309,12 +309,20 @@ class ListMessagesView(generics.ListAPIView):
         other_user_id = self.request.query_params.get('other_user_id')
         user = self.request.user
 
-        return ChatMessage.objects.filter(
-            ride_id=ride_id
-        ).filter(
-            models.Q(sender=user, receiver_id=other_user_id) |
-            models.Q(sender_id=other_user_id, receiver=user)
-        ).order_by('timestamp')
+        qs = ChatMessage.objects.filter(ride_id=ride_id)
+        
+        if other_user_id:
+            qs = qs.filter(
+                models.Q(sender=user, receiver_id=other_user_id) |
+                models.Q(sender_id=other_user_id, receiver=user)
+            )
+        else:
+            # If other_user_id is not provided, show all messages for this ride that involve the current user
+            qs = qs.filter(
+                models.Q(sender=user) | models.Q(receiver=user)
+            )
+            
+        return qs.order_by('timestamp')
 
 class UserChatsView(APIView):
     permission_classes = [permissions.IsAuthenticated]

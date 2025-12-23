@@ -121,7 +121,11 @@ class Ride(models.Model):
                 {
                     'type': 'ride_status_update',
                     'status': self.status,
+                    'ride_id': self.id,
+                    'amount_paid': str(self.estimated_fare) if self.estimated_fare else None, # Assuming estimated_fare is the amount paid for broadcast
                     'driver_name': self.driver.username if self.driver else None,
+                    'rider_id': self.rider.id if self.rider else None,
+                    'rider_username': self.rider.username if self.rider else None,
                 }
             )
 

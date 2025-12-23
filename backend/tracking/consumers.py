@@ -110,7 +110,9 @@ class RideConsumer(AsyncJsonWebsocketConsumer):
             'status': event['status'],
             'ride_id': event.get('ride_id'),
             'amount_paid': event.get('amount_paid'),
-            'driver_name': event.get('driver_name')
+            'driver_name': event.get('driver_name'),
+            'rider_id': event.get('rider_id'),
+            'rider_username': event.get('rider_username')
         })
 
     @database_sync_to_async
