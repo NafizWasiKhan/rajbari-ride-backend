@@ -2585,4 +2585,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // --- Safety Net for Blank Screen ---
+    setTimeout(() => {
+        const passengerUI = document.getElementById('passenger-dashboard');
+        const driverUI = document.getElementById('driver-dashboard');
+        // If neither is visible after 3 seconds, force show Passenger UI (default)
+        if ((!passengerUI || passengerUI.style.display === 'none') &&
+            (!driverUI || driverUI.style.display === 'none')) {
+            console.warn("[Safety Net] UI still hidden after 3s. Forcing Passenger UI.");
+            if (passengerUI) passengerUI.style.display = 'block';
+
+            // Also ensure map size is recalculated
+            if (typeof map !== 'undefined' && map) map.invalidateSize();
+        }
+    }, 3000);
+
 });
