@@ -152,6 +152,11 @@ class DriverActionView(APIView):
             if action == 'ACCEPT':
                 ride.driver = user
                 ride.status = 'ASSIGNED'
+                
+                # If there was a pending negotiation, mark it as accepted
+                if ride.negotiation_status == 'PENDING':
+                    ride.negotiation_status = 'ACCEPTED'
+                
                 ride.save()
                 return Response({"status": "Ride Assigned", "ride": RideSerializer(ride).data})
             

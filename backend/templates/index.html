@@ -556,9 +556,27 @@
             <p style="font-size: 13px; color: #666; margin-bottom: 8px;"><strong>To:</strong> <span
                     id="req-drop-addr">...</span></p>
             <div
-                style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #ddd; padding-top: 8px;">
-                <span style="font-weight: 600;">Est. Fare:</span>
-                <span id="req-fare-display" style="font-weight: 800; color: #27ae60; font-size: 18px;">0 BDT</span>
+                style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #ddd; padding-top: 8px; margin-bottom: 8px;">
+                <span id="req-distance-display" style="font-size: 13px; color: #666; font-weight: 600;">Distance: 0
+                    km</span>
+                <div>
+                    <span style="font-size: 12px; color: #888; display: block; text-align: right;">Est. Fare:</span>
+                    <span id="req-fare-display" style="font-weight: 800; color: #27ae60; font-size: 18px;">0 BDT</span>
+                </div>
+            </div>
+
+            <div style="border-top: 1px dashed #ccc; padding-top: 12px; margin-top: 8px;">
+                <label style="display: block; font-size: 14px; font-weight: 700; color: #333; margin-bottom: 8px;">
+                    <i class="fas fa-hand-holding-usd"></i> Your Offer (Negotiable)
+                </label>
+                <div style="position: relative; display: flex; align-items: center;">
+                    <span style="position: absolute; left: 12px; font-weight: 700; color: #555;">৳</span>
+                    <input type="number" id="req-proposed-fare" placeholder="Offer your price..."
+                        style="width: 100%; padding: 12px 12px 12px 30px; border: 2px solid #3498db; border-radius: 12px; font-size: 16px; font-weight: 700; outline: none; transition: border-color 0.2s;">
+                </div>
+                <p style="font-size: 11px; color: #7f8c8d; margin-top: 6px;">
+                    <i class="fas fa-info-circle"></i> Drivers are more likely to accept fair offers.
+                </p>
             </div>
         </div>
 

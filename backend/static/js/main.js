@@ -100,6 +100,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let pickupMarker = null;
     let dropMarker = null;
     let passengerMarker = null;
+    let estimatedDistance = 0;
+    let estimatedFare = 0;
     let driverMarker = null;
     let routeLine = null;
     let routingControl = null; // New: To store the routing control instance
@@ -217,7 +219,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const fareEl = document.getElementById('fare-display');
                 const costEl = document.getElementById('fare-amount');
                 if (fareEl && costEl) {
-                    costEl.innerText = data.estimated_fare;
+                    estimatedFare = data.estimated_fare;
+                    estimatedDistance = data.distance_km;
+                    costEl.innerText = estimatedFare;
                     fareEl.style.display = "block";
                 }
             } else {
@@ -282,9 +286,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // Populate Modal Details
         document.getElementById('req-pickup-addr').innerText = pickupAddress || `Loc: ${pickupLatLng.lat.toFixed(4)}, ${pickupLatLng.lng.toFixed(4)}`;
         document.getElementById('req-drop-addr').innerText = dropAddress || `Loc: ${dropLatLng.lat.toFixed(4)}, ${dropLatLng.lng.toFixed(4)}`;
-        // Use the fare calculated earlier
-        const fare = document.getElementById('fare-amount').innerText;
-        document.getElementById('req-fare-display').innerText = fare + " BDT";
+
+        // Show distance and estimated fare
+        document.getElementById('req-distance-display').innerText = `Distance: ${estimatedDistance} km`;
+        document.getElementById('req-fare-display').innerText = estimatedFare + " BDT";
+
+        // Default proposed fare to estimated fare
+        document.getElementById('req-proposed-fare').value = estimatedFare;
 
         document.getElementById('request-ride-modal').style.display = 'flex';
     };
@@ -310,13 +318,17 @@ document.addEventListener('DOMContentLoaded', () => {
         hideRequestModal();
 
         try {
+            const proposedFare = parseInt(document.getElementById('req-proposed-fare').value) || estimatedFare;
+
             const body = {
                 pickup_lat: pickupLatLng.lat,
                 pickup_lng: pickupLatLng.lng,
                 pickup_address: pickupAddress || `Loc: ${pickupLatLng.lat.toFixed(4)}, ${pickupLatLng.lng.toFixed(4)}`,
                 drop_lat: dropLatLng.lat,
                 drop_lng: dropLatLng.lng,
-                drop_address: dropAddress || `Loc: ${dropLatLng.lat.toFixed(4)}, ${dropLatLng.lng.toFixed(4)}`
+                drop_address: dropAddress || `Loc: ${dropLatLng.lat.toFixed(4)}, ${dropLatLng.lng.toFixed(4)}`,
+                proposed_fare: proposedFare,
+                negotiation_status: proposedFare !== estimatedFare ? 'PENDING' : 'NONE'
             };
             if (vehicleType) body.requested_vehicle_type = vehicleType;
 
@@ -1516,13 +1528,24 @@ document.addEventListener('DOMContentLoaded', () => {
         // If Cash is selected, show input and hide options
         if (method === 'CASH') {
             const inputContainer = document.getElementById('cash-amount-container');
-            const optionsContainer = document.querySelector('#payment-method-modal .modal-card > div:nth-child(3)'); // The grid container
+            const amountInput = document.getElementById('cash-amount-input');
+            const optionsContainer = document.querySelector('#payment-method-modal .modal-card > div:nth-child(3)');
+
+            // Fetch current ride to get the final negotiated fare
+            const token = localStorage.getItem('token');
+            try {
+                const res = await fetch('/api/rides/current/', {
+                    headers: { 'Authorization': `Token ${token}` }
+                });
+                if (res.ok) {
+                    const ride = await res.json();
+                    const finalFare = ride.proposed_fare || Math.round(ride.estimated_fare);
+                    if (amountInput) amountInput.value = finalFare;
+                }
+            } catch (e) { console.error("Could not fetch final fare", e); }
 
             if (inputContainer && optionsContainer) {
                 inputContainer.style.display = 'block';
-                // Highlight we are in cash mode or hide others? Let's just show the input below.
-                // Or better, hide the grid to focus on input.
-                // optionsContainer.style.display = 'none'; 
             }
             return;
         }
@@ -2051,31 +2074,34 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             list.innerHTML = rides.map(r => `
-            <div style="background: white; padding: 18px; border-radius: 16px; margin-bottom: 12px; border: 1px solid #eee; box-shadow: 0 4px 10px rgba(0,0,0,0.02);">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-                    <div>
-                        <span style="font-weight: 800; color: #333; font-size: 14px;">Ride #${r.id}</span>
-                        <span style="display: block; font-size: 10px; color: #aaa;">${formatRideDate(r.created_at)}</span>
+                <div style="background: white; padding: 18px; border-radius: 16px; margin-bottom: 12px; border: 1px solid #eee; box-shadow: 0 4px 10px rgba(0,0,0,0.02);">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                        <div>
+                            <span style="font-weight: 800; color: #333; font-size: 14px;">Ride #${r.id} • ${r.distance_km || '0.0'} km</span>
+                            <span style="display: block; font-size: 10px; color: #aaa;">${formatRideDate(r.created_at)}</span>
+                        </div>
+                        <span style="background: ${r.status === 'PAID' ? '#eef7f2' : (r.status === 'FINISHED' ? '#e8f4fd' : '#f1f5f9')}; color: ${r.status === 'PAID' ? '#27ae60' : (r.status === 'FINISHED' ? '#3498db' : '#475569')}; padding: 4px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase;">${r.status}</span>
                     </div>
-                    <span style="background: ${r.status === 'PAID' ? '#eef7f2' : '#f1f5f9'}; color: ${r.status === 'PAID' ? '#27ae60' : '#475569'}; padding: 4px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase;">${r.status}</span>
-                </div>
-                <div style="background: #f8f9fa; padding: 12px; border-radius: 12px; margin-bottom: 12px;">
-                    <p style="font-size: 13px; color: #444; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;">
-                        <i class="fas fa-circle-dot" style="color: #2ecc71; width: 14px; font-size: 10px;"></i>
-                        <span style="flex: 1;">${formatAddressDisplay(r.pickup_address)}</span>
-                    </p>
-                    <p style="font-size: 13px; color: #444; margin: 0; display: flex; align-items: center; gap: 8px;">
-                        <i class="fas fa-location-pin" style="color: #e74c3c; width: 14px; font-size: 12px;"></i>
-                        <span style="flex: 1;">${formatAddressDisplay(r.drop_address)}</span>
-                    </p>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-weight: 800; color: #27ae60; font-size: 16px;">${r.estimated_fare} BDT</span>
-                    <div style="font-size: 11px; color: #94a3b8; font-weight: 600;">
-                        ${r.driver_username ? `<i class="fas fa-user-circle"></i> ${r.driver_username}` : ''}
+                    <div style="background: #f8f9fa; padding: 12px; border-radius: 12px; margin-bottom: 12px;">
+                        <p style="font-size: 13px; color: #444; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;">
+                            <i class="fas fa-circle-dot" style="color: #2ecc71; width: 14px; font-size: 10px;"></i>
+                            <span style="flex: 1;">${formatAddressDisplay(r.pickup_address)}</span>
+                        </p>
+                        <p style="font-size: 13px; color: #444; margin: 0; display: flex; align-items: center; gap: 8px;">
+                            <i class="fas fa-location-pin" style="color: #e74c3c; width: 14px; font-size: 12px;"></i>
+                            <span style="flex: 1;">${formatAddressDisplay(r.drop_address)}</span>
+                        </p>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; flex-direction: column;">
+                            <span style="font-weight: 800; color: #27ae60; font-size: 16px;">${r.proposed_fare || Math.round(r.estimated_fare)} BDT</span>
+                            ${r.proposed_fare && r.proposed_fare !== r.estimated_fare ? `<span style="font-size: 9px; color: #e67e22; font-weight: 700;">NEGOTIATED</span>` : ''}
+                        </div>
+                        <div style="font-size: 11px; color: #94a3b8; font-weight: 600;">
+                            ${r.driver_username ? `<i class="fas fa-user-circle"></i> ${r.driver_username}` : ''}
+                        </div>
                     </div>
                 </div>
-            </div>
         `).join('');
         } catch (e) { list.innerHTML = 'Error loading history'; }
     };
@@ -2185,12 +2211,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div style="background: #fff; padding: 18px; border-radius: 16px; border: 1px solid #eee; margin-bottom: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
                         <div>
-                            <p style="font-size: 11px; font-weight: 800; color: #999; margin-bottom: 2px; text-transform: uppercase;">Request #${r.id}</p>
+                            <p style="font-size: 11px; font-weight: 800; color: #999; margin-bottom: 2px; text-transform: uppercase;">Request #${r.id} • ${r.distance_km || '0.0'} km</p>
                             <p style="font-size: 14px; font-weight: 700; color: #333; margin: 0;">${r.rider_username}</p>
                         </div>
                         <div style="text-align: right;">
-                            <span style="display: block; color: #27ae60; font-size: 16px; font-weight: 800;">${r.estimated_fare} BDT</span>
-                            <span style="font-size: 10px; color: #aaa;">${formatRideDate(r.created_at)}</span>
+                            ${r.proposed_fare && r.proposed_fare !== r.estimated_fare ? `
+                                <div style="display: flex; flex-direction: column; align-items: flex-end;">
+                                    <span style="font-size: 10px; text-decoration: line-through; color: #999;">${Math.round(r.estimated_fare)} BDT</span>
+                                    <span style="display: block; color: #e67e22; font-size: 18px; font-weight: 800;">${r.proposed_fare} BDT</span>
+                                    <span style="font-size: 9px; background: #fff3e0; color: #e67e22; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-top: 2px;">NEGOTIATED</span>
+                                </div>
+                            ` : `
+                                <span style="display: block; color: #27ae60; font-size: 18px; font-weight: 800;">${Math.round(r.estimated_fare)} BDT</span>
+                            `}
+                            <span style="font-size: 10px; color: #aaa; display: block; margin-top: 4px;">${formatRideDate(r.created_at)}</span>
                         </div>
                     </div>
                     <div style="background: #f8f9fa; padding: 12px; border-radius: 12px; font-size: 13px; color: #444; margin-bottom: 16px;">
@@ -2384,11 +2418,16 @@ document.addEventListener('DOMContentLoaded', () => {
         // Show Overlay
         const overlay = document.getElementById('map-preview-controls');
         overlay.style.display = 'flex';
-        document.getElementById('preview-fare').innerText = ride.estimated_fare + " BDT";
+
+        const finalFare = ride.proposed_fare || Math.round(ride.estimated_fare);
+        const isNegotiated = ride.proposed_fare && ride.proposed_fare !== ride.estimated_fare;
+
+        document.getElementById('preview-fare').innerText = finalFare + " BDT";
         document.getElementById('preview-route-info').innerHTML = `
-        <strong>From:</strong> ${ride.pickup_address || 'Nearby'} <br>
-        <strong>To:</strong> ${ride.drop_address || 'Destination'}
-    `;
+            <div style="font-size: 11px; color: #888; margin-bottom: 4px;">Distance: ${ride.distance_km || '0.0'} km ${isNegotiated ? '• <span style="color:#e67e22; font-weight:700;">Negotiated</span>' : ''}</div>
+            <strong>From:</strong> ${ride.pickup_address || 'Nearby'} <br>
+            <strong>To:</strong> ${ride.drop_address || 'Destination'}
+        `;
 
         const acceptBtn = document.getElementById('preview-accept-btn');
         const backBtn = document.getElementById('preview-back-btn');

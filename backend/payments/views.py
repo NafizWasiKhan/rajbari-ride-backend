@@ -37,7 +37,9 @@ class InitiatePaymentView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
         # 2. Local Record (Pending)
-        amount_paid = request.data.get('amount_paid', ride.estimated_fare)
+        # Prioritize proposed_fare (negotiated rate) over estimated_fare
+        default_amount = ride.proposed_fare if ride.proposed_fare else ride.estimated_fare
+        amount_paid = request.data.get('amount_paid', default_amount)
         payment, _ = Payment.objects.update_or_create(
             ride=ride,
             defaults={
