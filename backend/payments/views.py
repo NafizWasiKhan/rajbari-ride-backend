@@ -159,32 +159,6 @@ class DemoPaymentCallbackView(APIView):
 
 class WalletStatsView(APIView):
     """
-    Returns wallet balance, total earnings, total spent, and recent transaction history.
-    """
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        from .models import Wallet, Transaction
-        from django.db.models import Sum
-        
-        user = request.user
-        wallet, _ = Wallet.objects.get_or_create(user=user)
-        
-        # Get transaction totals
-        total_earnings = Transaction.objects.filter(
-            wallet=wallet, 
-            transaction_type='EARNING'
-        ).aggregate(Sum('amount'))['amount__sum'] or 0
-        
-        # For passengers, we track total spent in RIDE_PAYMENT (negative amounts in transaction records usually, or positive depending on implementation plan)
-        # Looking at previous implementation, EARNING is positive, COMMISSION is negative.
-        # User requested "total spend", so we sum payments.
-        
-        # In actual system, we should probably have a 'PAYMENT' transaction type for riders.
-        # Currently, PaymentService only creates COMMISSION and EARNING for the driver.
-        # Let's check how payments are recorded for the rider... 
-        # Actually, the Transaction model has 'RIDE_PAYMENT' type. Let's ensure it's used or calculated.
-        
         # fallback to sum of completed payments for this user as rider
         from .models import Payment
         total_spent = Payment.objects.filter(
