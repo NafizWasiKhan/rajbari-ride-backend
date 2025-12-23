@@ -873,6 +873,15 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
         } else if (status === 'COMPLETED') {
+            // CRITICAL FIX: Ensure WebSocket is connected for payment notifications
+            console.log('[Payment Flow] Ride COMPLETED - Ensuring WebSocket connection');
+            if (!rideSocket && details.id) {
+                const token = localStorage.getItem('token');
+                const isDriverUser = currentUser && currentUser.profile.role === 'DRIVER';
+                console.log('[WebSocket] Reconnecting for payment flow, isDriver:', isDriverUser);
+                connectWebSocket(details.id, token, isDriverUser);
+            }
+
             if (isDriver) {
                 if (jobStatusText) jobStatusText.innerText = "Trip Completed. Waiting for payment.";
                 if (jobActiveControls) jobActiveControls.style.display = 'flex';
@@ -1296,6 +1305,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         rideSocket.onmessage = (e) => {
             const data = JSON.parse(e.data);
+            console.log('[WebSocket] Received message:', data); // DEBUG
+
             if (data.type === 'location_update') {
                 // Determine whose location this is
                 if (data.role === 'DRIVER' && !isDriver) {
@@ -1304,6 +1315,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     updatePassengerMarker(data.lat, data.lng);
                 }
             } else if (data.type === 'status_update') {
+                console.log('[WebSocket] Status update received:', data.status); // DEBUG
                 updateRideStatus(data.status, data);
             }
         };
@@ -1532,13 +1544,35 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             if (response.ok) {
                 if (method === 'CASH') {
-                    // alert(`Cash payment of ${amount} BDT recorded!`); 
-                    // No longer manually updating status to PAID. We wait for socket or response.
+                    console.log('[Payment] Cash payment initiated, response:', data); // DEBUG
+
+                    // Backend returns status: PENDING for cash payments
                     if (data.status === 'PENDING') {
-                        alert("Cash payment request sent! Please wait for driver confirmation.");
-                        // We can force a UI update here if socket is slow
+                        alert(`Cash payment of ${Math.round(amount)} BDT sent! Waiting for driver confirmation.`);
+                        // Force UI update immediately (socket will also update)
+                        updateRideStatus('PAYMENT_PENDING', { id: rideId, amount_paid: amount });
+                    } else {
+                        // Fallback if response format changes
+                        alert("Payment initiated. Waiting for confirmation.");
                         updateRideStatus('PAYMENT_PENDING', { id: rideId, amount_paid: amount });
                     }
+
+                    // CRITICAL FIX: Fallback status check in case WebSocket fails
+                    console.log('[Payment] Setting up fallback status check...');
+                    setTimeout(async () => {
+                        try {
+                            const checkRes = await fetch('/api/rides/current/', {
+                                headers: { 'Authorization': `Token ${token}` }
+                            });
+                            if (checkRes.ok) {
+                                const ride = await checkRes.json();
+                                console.log('[Payment] Fallback check - current status:', ride.status);
+                                updateRideStatus(ride.status, ride);
+                            }
+                        } catch (e) {
+                            console.error('[Payment] Fallback check failed:', e);
+                        }
+                    }, 1500); // Wait 1.5 seconds for WebSocket, then fallback
                 } else if (data.checkout_url) {
                     window.location.href = data.checkout_url;
                 }

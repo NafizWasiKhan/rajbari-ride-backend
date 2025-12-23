@@ -63,6 +63,11 @@ class InitiatePaymentView(APIView):
             # If it's CASH, we do NOT finish yet. We wait for Driver Confirmation.
             if method == 'CASH':
                 # Notify Driver to Confirm
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"[CASH PAYMENT] Broadcasting PAYMENT_PENDING for ride {ride.id} to channel ride_{ride.id}")
+                print(f"[CASH PAYMENT DEBUG] Broadcasting to ride_{ride.id} - Amount: {amount_paid}")
+                
                 from channels.layers import get_channel_layer
                 from asgiref.sync import async_to_sync
                 layer = get_channel_layer()
@@ -81,6 +86,9 @@ class InitiatePaymentView(APIView):
                         "driver_name": ride.driver.username if ride.driver else "Driver"
                     }
                 )
+                
+                logger.info(f"[CASH PAYMENT] Broadcast complete for ride {ride.id}")
+                print(f"[CASH PAYMENT DEBUG] Broadcast sent successfully")
                 
                 return Response({
                     "status": "PENDING", 
