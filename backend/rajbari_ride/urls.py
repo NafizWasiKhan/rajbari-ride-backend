@@ -23,5 +23,6 @@ urlpatterns = [
     path("api/users/", include("users.urls")),
     path("api/rides/", include("rides.urls")),
     path("api/payments/", include("payments.urls")),
+    # Serve Frontend Monolithically
     path("", home, name="home"),
 ]

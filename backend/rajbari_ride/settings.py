@@ -165,6 +165,9 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 
+# Enable Whitenoise compression and caching
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
 # SSLCommerz Configuration (Sandbox)
 SSLCOMMERZ_CONFIG = {
     'STORE_ID': 'rajba676579a78f2ec', # Provided as example sandbox ID
