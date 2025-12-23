@@ -8,10 +8,10 @@ class RideCreateSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'pickup_lat', 'pickup_lng', 'drop_lat', 'drop_lng', 
             'pickup_address', 'drop_address', 'status', 'distance_km', 
-            'estimated_fare', 'rider', 'requested_vehicle_type',
+            'estimated_fare', 'proposed_fare', 'negotiation_status', 'rider', 'requested_vehicle_type',
             'is_scheduled', 'scheduled_datetime', 'available_seats'
         ]
-        read_only_fields = ['id', 'status', 'distance_km', 'estimated_fare', 'rider']
+        read_only_fields = ['id', 'status', 'distance_km', 'estimated_fare', 'rider', 'negotiation_status']
 
     def validate(self, data):
         pickup_lat = data['pickup_lat']
@@ -68,7 +68,7 @@ class RideSerializer(serializers.ModelSerializer):
             'driver_name', 'driver_car_model', 'driver_car_color', 'driver_plate_number', 'driver_rating',
             'pickup_lat', 'pickup_lng', 'pickup_address', 
             'drop_lat', 'drop_lng', 'drop_address',
-            'distance_km', 'estimated_fare', 'status', 'created_at',
+            'distance_km', 'estimated_fare', 'proposed_fare', 'negotiation_status', 'status', 'created_at',
             'requested_vehicle_type', 'actual_vehicle',
             'start_time', 'end_time', 'cancellation_time', 'cancellation_reason',
             'is_scheduled', 'scheduled_datetime', 'available_seats',

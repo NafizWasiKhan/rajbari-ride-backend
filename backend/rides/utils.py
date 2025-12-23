@@ -16,23 +16,19 @@ def calculate_distance(lat1, lon1, lat2, lon2):
     r = 6371 # Radius of earth in kilometers. Use 3956 for miles.
     return c * r
 
-def calculate_fare(distance_km, base_fare=50.0, per_km_rate=20.0, per_minute_rate=2.0, duration_minutes=0):
+def calculate_fare(distance_km, base_fare=0, per_km_rate=10, per_minute_rate=0, duration_minutes=0):
     """
-    Calculate fare based on distance and duration with configurable rates.
+    Calculate ride fare based on distance.
+    Default: 10 BDT per kilometer (integer).
+    User can negotiate a different fare later.
     """
-    from decimal import Decimal
+    # Simple calculation: base fare + (distance * rate per km)
+    # Default for Rajbari Ride: 10 BDT/km with no base fare
+    fare = base_fare + (distance_km * per_km_rate)
     
-    # Ensure inputs are Decimal for precise currency calculation
-    distance_km = Decimal(str(distance_km))
-    duration_minutes = Decimal(str(duration_minutes))
-    
-    # Rates might be float if defaults are used, but typically Decimal from model
-    base_fare = Decimal(str(base_fare))
-    per_km_rate = Decimal(str(per_km_rate))
-    per_minute_rate = Decimal(str(per_minute_rate))
+    # Return as integer (round to nearest BDT)
+    return int(round(fare))
 
-    fare = base_fare + (distance_km * per_km_rate) + (duration_minutes * per_minute_rate)
-    return round(fare, 2)
 
 def is_valid_coordinate(lat, lng):
     """Checks if coordinates are within reasonable global limits."""

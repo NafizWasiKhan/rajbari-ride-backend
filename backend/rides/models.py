@@ -28,6 +28,19 @@ class Ride(models.Model):
     distance_km = models.DecimalField(max_digits=6, decimal_places=2)
     estimated_fare = models.DecimalField(max_digits=8, decimal_places=2)
     
+    # Fare negotiation fields
+    proposed_fare = models.IntegerField(null=True, blank=True, help_text="Passenger's proposed fare in BDT")
+    negotiation_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('NONE', 'No Negotiation'),
+            ('PENDING', 'Pending Driver Response'),
+            ('ACCEPTED', 'Driver Accepted'),
+            ('REJECTED', 'Driver Rejected')
+        ],
+        default='NONE'
+    )
+    
     is_scheduled = models.BooleanField(default=False)
     scheduled_datetime = models.DateTimeField(null=True, blank=True)
     available_seats = models.PositiveIntegerField(default=1)
