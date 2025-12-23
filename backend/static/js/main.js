@@ -1483,12 +1483,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.confirmCashPayment = async function () {
         const amountInput = document.getElementById('cash-amount-input');
-        const amount = parseFloat(amountInput.value);
+        let amount = parseFloat(amountInput.value);
 
         if (!amount || amount <= 0) {
             alert("Please enter a valid amount.");
             return;
         }
+
+        // Round to integer
+        amount = Math.round(amount);
 
         initiatePaymentRequest('CASH', amount);
     };
