@@ -12,11 +12,13 @@ document.addEventListener('DOMContentLoaded', () => {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
-    // Bounding box for Bangladesh
     const bangladeshBounds = {
         lat: [20.50, 26.50],
         lng: [88.00, 92.70]
     };
+
+    // Default Fallback (Rajbari)
+    const RAJBARI_DEFAULT = { lat: 23.7638, lng: 89.6467 };
     // --- Helper for 401 Handling ---
     window.handleAuthError = function () {
         console.warn("Session expired. Logging out...");
@@ -1284,12 +1286,29 @@ document.addEventListener('DOMContentLoaded', () => {
             }, (err) => {
                 console.error("[GPS] Error:", err.message);
                 if (badge) {
+                    // Update status but don't panic - maybe strict mode needed?
+                    // Actually, if tracking fails, we might want to fallback to a default location 
+                    // OR just let the user set it manually on the map.
+                    // The report says 'Location access denied'. This blocks auto-location.
+                    // We should alert ONCE and then stop pestering.
+
                     const status = document.getElementById('location-sharing-status');
-                    if (status) status.innerText = "GPS ERROR: " + err.message;
+                    if (status) status.innerText = "GPS BLOCKED: Using Default";
                     badge.style.background = "rgba(231, 76, 60, 0.1)";
                     badge.style.color = "#e74c3c";
                     badge.style.borderColor = "rgba(231, 76, 60, 0.2)";
+
+                    if (window.map && typeof RAJBARI_DEFAULT !== 'undefined') {
+                        // console.log("Fallback to Rajbari"); 
+                        window.map.setView(RAJBARI_DEFAULT, 14);
+                    }
                 }
+
+                // FALLBACK: Simulate sending default location so logic continues?
+                // Or better, just center map if this was an initial load.
+                // If this is continuous tracking, we can't really "fake" movement.
+                // But we can ensure the MAP centers on Rajbari initially.
+
             }, { enableHighAccuracy: true });
         }, 5000);
     }
