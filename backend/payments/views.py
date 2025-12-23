@@ -159,24 +159,46 @@ class DemoPaymentCallbackView(APIView):
 
 class WalletStatsView(APIView):
     """
-        # fallback to sum of completed payments for this user as rider
-        from .models import Payment
+    Get wallet balance and transaction stats for the current user.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .models import Wallet, Transaction, Payment
+        from django.db.models import Sum
+        
+        user = request.user
+        wallet, _ = Wallet.objects.get_or_create(user=user)
+        
+        # Get transaction totals
+        total_earnings = Transaction.objects.filter(
+            wallet=wallet, 
+            transaction_type='EARNING'
+        ).aggregate(Sum('amount'))['amount__sum'] or 0
+        
+        # Total spent (for passengers)
         total_spent = Payment.objects.filter(
             ride__rider=user, 
             status='COMPLETED'
         ).aggregate(Sum('amount'))['amount__sum'] or 0
 
         # Recent activities (last 20)
-        recent = Transaction.objects.filter(wallet=wallet).order_by('-timestamp')[:20]
-        history = [{
-            "id": t.id,
-            "type": t.transaction_type,
-            "amount": float(t.amount),
-            "description": t.description,
-            "timestamp": t.timestamp.isoformat(),
-            "ride_id": t.ride_id if t.ride else None
-        } for t in recent]
-
+        transactions = Transaction.objects.filter(wallet=wallet).order_by('-timestamp')[:20]
+        
+        transactions_data = [{
+            'id': t.id,
+            'type': t.transaction_type,
+            'amount': float(t.amount),
+            'description': t.description,
+            'timestamp': t.timestamp.isoformat()
+        } for t in transactions]
+        
+        return Response({
+            'total_income': float(total_earnings),
+            'wallet_balance': float(wallet.balance),
+            'total_spent': float(total_spent),
+            'recent_transactions': transactions_data
+        })
 
 class ConfirmCashPaymentView(APIView):
     """
