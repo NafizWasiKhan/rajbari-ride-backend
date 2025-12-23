@@ -17,6 +17,23 @@ document.addEventListener('DOMContentLoaded', () => {
         lat: [20.50, 26.50],
         lng: [88.00, 92.70]
     };
+    // --- Helper for 401 Handling ---
+    window.handleAuthError = function () {
+        console.warn("Session expired. Logging out...");
+        localStorage.removeItem('token');
+        localStorage.removeItem('userRole');
+        localStorage.removeItem('currentView');
+        if (currentUser) currentUser = null;
+
+        // Use generic Alert + Login Modal
+        alert("Session expired. Please log in again.");
+        if (typeof Auth !== 'undefined' && Auth.showModal) {
+            Auth.showModal('login');
+        } else {
+            location.reload();
+        }
+    };
+
     // ===== STATE PERSISTENCE HELPER =====
     const RideState = {
         save(rideData) {
@@ -518,6 +535,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const res = await fetch('/api/users/profile/', {
                     headers: { 'Authorization': `Token ${token}` }
                 });
+                if (res.status === 401) {
+                    handleAuthError();
+                    return; // Stop initialization
+                }
                 const userData = await res.json();
                 const profile = userData.user.profile;
                 currentUser = userData.user; // Set in closure scope
@@ -540,7 +561,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         jobText.innerHTML = '<i class="fas fa-search-location"></i> Searching for nearby ride requests...';
                     }
                 }
-            } catch (e) { console.error("Profile fetch failed", e); }
+            } catch (e) {
+                console.error("Profile fetch failed", e);
+                // If fetching profile fails with 401, it's not caught here but handled if response.status checked manually.
+                // However, fetch throws on network error, not 401. Let's fix the try-catch block above.
+            }
         }
 
         // Re-evaluate role from currentUser if available (fix for stale localStorage)
@@ -1893,6 +1918,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 if (!res.ok) {
+                    if (res.status === 401) {
+                        handleAuthError();
+                        return;
+                    }
                     const errorText = await res.text();
                     console.error("Fetch error:", res.status, errorText);
                     alert(`Error fetching requests: HTTP ${res.status}\n${errorText.substring(0, 100)}`);
