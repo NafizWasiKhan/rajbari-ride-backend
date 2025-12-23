@@ -23,7 +23,7 @@ def calculate_fare(distance_km, base_fare=0, per_km_rate=10, per_minute_rate=0, 
     User can negotiate a different fare later.
     """
     # Simple calculation: base fare + (distance * rate per km)
-    # Default for Rajbari Ride: 10 BDT/km with no base fare
+    # Default for Zatra: 10 BDT/km with no base fare
     fare = base_fare + (distance_km * per_km_rate)
     
     # Return as integer (round to nearest BDT)

@@ -1,5 +1,5 @@
 /**
- * Rajbari Ride - Authentication Module
+ * Zatra - Authentication Module
  * Handles login, signup, role management, and UI modals.
  */
 

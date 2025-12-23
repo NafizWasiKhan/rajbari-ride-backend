@@ -1,6 +1,6 @@
-# Rajbari Ride - Frontend
+# Zatra - Frontend
 
-Standalone frontend for the Rajbari Ride application. Designed for deployment on Netlify or any static hosting platform.
+Standalone frontend for the Zatra application. Designed for deployment on Netlify or any static hosting platform.
 
 ## 📁 Structure
 

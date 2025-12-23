@@ -1,4 +1,4 @@
-# Rajbari Ride
+# Zatra
 
 A ride-sharing web application built with Django, Channels (WebSockets), and Leaflet/OSM.
 

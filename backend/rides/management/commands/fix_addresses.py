@@ -34,7 +34,7 @@ class Command(BaseCommand):
     def reverse_geocode(self, lat, lng):
         try:
             url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lng}&zoom=18"
-            headers = {'User-Agent': 'RajbariRideBot/1.0'}
+            headers = {'User-Agent': 'ZatraBot/1.0'}
             response = requests.get(url, headers=headers)
             data = response.json()
             if 'display_name' in data:
