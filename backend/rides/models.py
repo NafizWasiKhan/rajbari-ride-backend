@@ -90,7 +90,7 @@ class Ride(models.Model):
                 'REQUESTED': ['ASSIGNED', 'CANCELLED'],
                 'ASSIGNED': ['ONGOING', 'COMPLETED', 'CANCELLED'],
                 'ONGOING': ['COMPLETED', 'CANCELLED'],
-                'COMPLETED': ['PAID'],
+                'COMPLETED': ['PAID', 'FINISHED'], # Allow direct transition for cash payments
                 'CANCELLED': [],
                 'PAID': ['FINISHED'],
                 'FINISHED': []

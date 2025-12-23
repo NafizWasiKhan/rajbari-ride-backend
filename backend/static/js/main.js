@@ -1690,6 +1690,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ===== CHAT SYSTEM =====
     let currentChatRideId = null;
     let currentChatOtherId = null;
+    let chatInterval = null; // Fix: Add missing variable declaration
     let currentChatOtherName = null;
 
     window.openChat = function (rideId, otherId, otherName) {
