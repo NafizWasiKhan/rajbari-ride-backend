@@ -1768,8 +1768,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (response.ok) {
                 alert("Trip Finished! Please wait for payment.");
                 // Note: WebSocket status_update will handle the UI refreshment
+            } else {
+                const data = await response.json();
+                alert(data.error || "Failed to finish trip. Status: " + response.status);
             }
-        } catch (e) { alert("Action failed"); }
+        } catch (e) {
+            console.error(e);
+            alert("Network error finishing trip.");
+        }
     };
 
     window.confirmFinishRide = async function (rideId) {
@@ -1790,8 +1796,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 fetchWalletStats(); // Refresh stats after ride finish
                 // Note: WebSocket status_update will trigger 'FINISHED' in updateRideStatus 
                 // which handles final cleanup and resetSelection.
+            } else {
+                const data = await response.json();
+                alert(data.error || "Failed to close ride. Status: " + response.status);
             }
-        } catch (e) { alert("Action failed"); }
+        } catch (e) {
+            console.error(e);
+            alert("Network error closing ride.");
+        }
     };
 
 
