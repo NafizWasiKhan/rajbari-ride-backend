@@ -543,24 +543,52 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (e) { console.error("Profile fetch failed", e); }
         }
 
-        if (token && role === 'DRIVER') {
-            if (passengerUI) passengerUI.style.display = 'none';
-            if (driverUI) driverUI.style.display = 'block';
-            if (onlineBtn) onlineBtn.style.display = 'flex';
+        // Re-evaluate role from currentUser if available (fix for stale localStorage)
+        if (currentUser && currentUser.profile) {
+            const role = currentUser.profile.role;
+            localStorage.setItem('userRole', role);
 
-            if (currentUser && !notificationSocket) {
-                if (typeof connectNotificationSocket === 'function') connectNotificationSocket();
+            if (role === 'DRIVER') {
+                if (passengerUI) passengerUI.style.display = 'none';
+                if (driverUI) driverUI.style.display = 'block';
+                if (onlineBtn) onlineBtn.style.display = 'flex';
+
+                if (!notificationSocket) {
+                    if (typeof connectNotificationSocket === 'function') connectNotificationSocket();
+                }
+                fetchWalletStats();
+                updateAvailableCount();
+
+                // Immediate polling if online
+                if (currentUser.profile.is_online) {
+                    startDriverPolling();
+                } else {
+                    stopDriverPolling();
+                }
+            } else {
+                if (passengerUI) passengerUI.style.display = 'block';
+                if (driverUI) driverUI.style.display = 'none';
+                if (onlineBtn) onlineBtn.style.display = 'none';
+                stopJobPolling();
+                stopDriverPolling();
+                fetchWalletStats();
             }
-            fetchWalletStats();
-            updateAvailableCount();
         } else {
-            if (passengerUI) passengerUI.style.display = 'block';
-            if (driverUI) driverUI.style.display = 'none';
-            if (onlineBtn) onlineBtn.style.display = 'none';
-            stopJobPolling();
-            stopDriverPolling();
-            fetchWalletStats();
+            // Fallback to localStorage if profile fetch failed or not run yet
+            // (Only for initial render before API returns)
+            const role = localStorage.getItem('userRole');
+            if (token && role === 'DRIVER') {
+                if (passengerUI) passengerUI.style.display = 'none';
+                if (driverUI) driverUI.style.display = 'block';
+                if (onlineBtn) onlineBtn.style.display = 'flex';
+                // ... rest handled by profile fetch update later
+            } else {
+                if (passengerUI) passengerUI.style.display = 'block';
+                if (driverUI) driverUI.style.display = 'none';
+                if (onlineBtn) onlineBtn.style.display = 'none';
+            }
         }
+
 
         const scheduleControls = document.getElementById('driver-schedule-controls');
         if (scheduleControls) {
