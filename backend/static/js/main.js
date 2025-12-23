@@ -1891,7 +1891,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 const res = await fetch('/api/rides/available/', {
                     headers: { 'Authorization': `Token ${token}` }
                 });
+
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    console.error("Fetch error:", res.status, errorText);
+                    alert(`Error fetching requests: HTTP ${res.status}\n${errorText.substring(0, 100)}`);
+                    throw new Error(`HTTP ${res.status}`);
+                }
+
                 rides = await res.json();
+            }
+
+            // Validation: Ensure 'rides' is an array
+            if (!Array.isArray(rides)) {
+                console.error("Invalid response format (not array):", rides);
+                alert("Server returned invalid data format. Check console.");
+                list.innerHTML = '<p style="text-align: center; color: red;">Failed to load data (Invalid format)</p>';
+                return;
             }
 
             if (rides.length === 0) {
@@ -1937,7 +1953,8 @@ document.addEventListener('DOMContentLoaded', () => {
             `).join('');
         } catch (e) {
             console.error("Available requests load fail", e);
-            list.innerHTML = '<p style="color: red; text-align: center; padding: 20px;">Failed to load available requests. Please try again.</p>';
+            alert("Exception loading requests: " + e.message);
+            list.innerHTML = `<p style="color: red; text-align: center; padding: 20px;">Failed to load requests: ${e.message}</p>`;
         }
     };
 
