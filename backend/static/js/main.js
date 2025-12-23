@@ -888,13 +888,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 startPaymentPolling(details.id);
             }
 
+
             if (isDriver) {
                 if (jobStatusText) jobStatusText.innerText = "Trip Completed. Waiting for payment.";
                 if (jobActiveControls) jobActiveControls.style.display = 'flex';
+
+                // CRITICAL: Ensure driver dashboard is visible
+                const driverDashboard = document.getElementById('driver-dashboard');
+                if (driverDashboard) driverDashboard.style.display = 'block';
+                console.log('[UI] Driver dashboard shown, polling active');
             } else {
+                // Passenger side
                 if (text) text.innerText = "Arrived! Please pay the fare.";
-                if (payNowBtn) payNowBtn.style.display = "block";
+                if (payNowBtn) {
+                    payNowBtn.style.display = "block";
+                    console.log('[UI] Pay Now button shown');
+                }
                 if (finishTripBtn) finishTripBtn.style.display = 'none';
+
+                // CRITICAL FIX: Force bottom sheet to open
+                const bottomSheet = document.getElementById('bottom-sheet');
+                const statusContainer = document.getElementById('status-container');
+
+                if (bottomSheet) {
+                    bottomSheet.classList.add('open');
+                    console.log('[UI] Bottom sheet force opened');
+                }
+
+                if (statusContainer) {
+                    statusContainer.style.display = 'block';
+                    console.log('[UI] Status container shown');
+                }
             }
             // Do NOT cleanup here, we need to wait for payment confirmation
         } else if (status === 'PAID') {
