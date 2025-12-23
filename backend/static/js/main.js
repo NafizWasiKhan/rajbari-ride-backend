@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const data = localStorage.getItem('active_ride_state');
                 return data ? JSON.parse(data) : null;
-            } catch (e) { 
+            } catch (e) {
                 console.error('[State] Load failed', e);
                 return null;
             }
@@ -577,19 +577,19 @@ document.addEventListener('DOMContentLoaded', () => {
     async function checkActiveRide() {
         const token = localStorage.getItem('token');
         const role = localStorage.getItem('userRole');
-        
+
         if (!token) {
             console.log('[Recovery] No token, skipping active ride check');
             return;
         }
-        
+
         // First check localStorage for cached state (instant UI restore)
         const cachedState = RideState.load();
         if (cachedState) {
             console.log("[Recovery] Restoring from cache:", cachedState.id, cachedState.status);
             updateRideStatus(cachedState.status, cachedState);
         }
-        
+
         // Then fetch fresh data from server
         try {
             const res = await fetch('/api/rides/current/', {
@@ -598,23 +598,23 @@ document.addEventListener('DOMContentLoaded', () => {
             if (res.ok) {
                 const ride = await res.json();
                 console.log("[Recovery] Active ride found:", ride.id, ride.status);
-                
+
                 // Save to cache for next reload
                 RideState.save(ride);
-                
+
                 // Update UI with fresh data
                 updateRideStatus(ride.status, ride);
-                
+
                 // Reconnect WebSocket (will fallback to polling if WS fails)
                 if (typeof connectWebSocket === 'function') {
                     connectWebSocket(ride.id, token, role === 'DRIVER');
                 }
-                
+
                 // Start polling for driver
                 if (role === 'DRIVER' && currentUser?.profile?.is_online) {
                     startDriverPolling();
                 }
-                
+
                 // Start polling for passenger
                 if (role === 'PASSENGER' && ['REQUESTED', 'ASSIGNED', 'ONGOING'].includes(ride.status)) {
                     startPassengerPolling(ride.id);
@@ -631,19 +631,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log("[Recovery] Using cached state due to network error");
             }
         }
-    }` }
-            });
-            if (res.ok) {
-                const ride = await res.json();
-                console.log("[Auto-Recover] Active ride found:", ride.id);
-
-                // Restore Marker & UI
-                updateRideStatus(ride.status, ride);
-
-                // Reconnect WS
-                connectWebSocket(ride.id, token, role === 'DRIVER');
-            }
-        } catch (e) { console.log("No active ride to recover."); }
     }
 
     window.toggleOnlineStatus = async function () {
@@ -714,13 +701,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const isActive = ['ASSIGNED', 'ONGOING', 'COMPLETED'].includes(status);
         if (isActive && requestRideBtn) {
             requestRideBtn.style.display = 'none';
-    
-        // Save state for persistence across reloads
-        if (details && details.id) {
-            const stateData = {...details, status: status};
-            RideState.save(stateData);
+
+            // Save state for persistence across reloads
+            if (details && details.id) {
+                const stateData = { ...details, status: status };
+                RideState.save(stateData);
+            }
         }
-    }
 
         if (isActive && statusContainer) {
             statusContainer.style.display = 'block';
@@ -1391,72 +1378,30 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
 
-    // --- Built-in Messaging System ---
-    let currentChatRideId = null;
-    let currentChatOtherUserId = null;
-    let chatInterval = null;
-
-    window.openChat = function (rideId, otherUserId, otherUsername) {
-        currentChatRideId = rideId;
-        currentChatOtherUserId = otherUserId;
-        document.getElementById('chat-title').innerText = `Chat with ${otherUsername}`;
-        document.getElementById('chat-modal').style.display = 'flex';
-        loadMessages();
-        startPolling();
-    };
-
-    window.closeChat = function () {
-        document.getElementById('chat-modal').style.display = 'none';
-        clearInterval(chatInterval);
-        currentChatRideId = null;
-        currentChatOtherUserId = null;
-    };
-
-    async function loadMessages() {
-        if (!currentChatRideId || !currentChatOtherUserId) return;
-        try {
-            const response = await fetch(`/api/rides/messages/?ride_id=${currentChatRideId}&other_user_id=${currentChatOtherUserId}`, {
-                headers: { 'Authorization': `Token ${localStorage.getItem('token')}` }
-            });
-            const messages = await response.json();
-            const container = document.getElementById('chat-messages');
-
-            container.innerHTML = messages.map(msg => {
-                const isMe = msg.sender == currentUser.id;
-                return `
-                    <div style="align-self: ${isMe ? 'flex-end' : 'flex-start'}; background: ${isMe ? '#2ecc71' : '#f1f1f1'}; color: ${isMe ? 'white' : 'black'}; padding: 10px 14px; border-radius: 12px; max-width: 80%; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                        ${msg.content}
-                        <div style="font-size: 10px; opacity: 0.7; margin-top: 4px; text-align: right;">${new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                    </div>
-                `;
-            }).join('');
-            container.scrollTop = container.scrollHeight;
-        } catch (e) { console.error("Error loading messages", e); }
-    }
-
-    
     // ===== CHAT SYSTEM =====
     let currentChatRideId = null;
     let currentChatOtherId = null;
     let currentChatOtherName = null;
 
-    window.openChat = function(rideId, otherId, otherName) {
+    window.openChat = function (rideId, otherId, otherName) {
         console.log('[Chat] Opening chat for ride:', rideId);
         currentChatRideId = rideId;
         currentChatOtherId = otherId;
         currentChatOtherName = otherName;
-        
+
         const modal = document.getElementById('chat-modal');
         const title = document.getElementById('chat-title');
         if (modal) modal.style.display = 'flex';
         if (title) title.innerText = `Chat with ${otherName}`;
-        
+
         loadChatMessages(rideId);
+        startPolling();
     };
 
-    window.closeChat = function() {
+    window.closeChat = function () {
         const modal = document.getElementById('chat-modal');
         if (modal) modal.style.display = 'none';
+        clearInterval(chatInterval);
         currentChatRideId = null;
         currentChatOtherId = null;
         currentChatOtherName = null;
@@ -1466,9 +1411,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const token = localStorage.getItem('token');
         const messagesDiv = document.getElementById('chat-messages');
         if (!messagesDiv) return;
-        
-        messagesDiv.innerHTML = '<p style="text-align:center;color:#888;padding:20px;">Loading messages...</p>';
-        
+
         try {
             const res = await fetch(`/api/chat/messages/${rideId}/`, {
                 headers: { 'Authorization': `Token ${token}` }
@@ -1476,32 +1419,29 @@ document.addEventListener('DOMContentLoaded', () => {
             if (res.ok) {
                 const messages = await res.json();
                 displayChatMessages(messages);
-            } else {
-                messagesDiv.innerHTML = '<p style="text-align:center;color:#888;padding:20px;">No messages yet. Start chatting!</p>';
             }
         } catch (e) {
             console.error('[Chat] Load error', e);
-            messagesDiv.innerHTML = '<p style="text-align:center;color:#888;padding:20px;">Could not load messages.</p>';
         }
     }
 
     function displayChatMessages(messages) {
         const messagesDiv = document.getElementById('chat-messages');
         if (!messagesDiv) return;
-        
+
         const currentUserId = currentUser?.id;
-        
+
         if (messages.length === 0) {
             messagesDiv.innerHTML = '<p style="text-align:center;color:#888;padding:20px;">No messages yet.</p>';
             return;
         }
-        
+
         messagesDiv.innerHTML = messages.map(msg => {
             const isOwn = msg.sender === currentUserId;
             const align = isOwn ? 'flex-end' : 'flex-start';
             const bg = isOwn ? '#3498db' : '#ecf0f1';
             const color = isOwn ? 'white' : '#2c3e50';
-            
+
             return `
                 <div style="display:flex;justify-content:${align};margin-bottom:8px;">
                     <div style="background:${bg};color:${color};padding:10px 14px;border-radius:12px;max-width:70%;word-wrap:break-word;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
@@ -1511,23 +1451,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
         }).join('');
-        
+
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
-    // ===== END CHAT SYSTEM =====
 
-    window.sendMessage = async function() {
+    window.sendMessage = async function () {
         const input = document.getElementById('chat-input');
         const message = input?.value?.trim();
         if (!message || !currentChatRideId) {
             console.warn('[Chat] Cannot send: missing message or ride ID');
             return;
         }
-        
+
         const token = localStorage.getItem('token');
         const originalMsg = input.value;
         input.value = '';
-        
+
         try {
             const res = await fetch(`/api/chat/send/`, {
                 method: 'POST',
@@ -1540,7 +1479,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     message: message
                 })
             });
-            
+
             if (res.ok) {
                 console.log('[Chat] Message sent successfully');
                 loadChatMessages(currentChatRideId);
@@ -1553,21 +1492,7 @@ document.addEventListener('DOMContentLoaded', () => {
             input.value = originalMsg;
             alert('Network error sending message');
         }
-    }`
-                },
-                body: JSON.stringify({
-                    ride: currentChatRideId,
-                    receiver: currentChatOtherUserId,
-                    content: content
-                })
-            });
-            if (response.ok) {
-                input.value = '';
-                loadMessages();
-            }
-        } catch (e) { console.error("Error sending message", e); }
     };
-
     function stopJobPolling() {
         if (typeof chatInterval !== 'undefined') {
             clearInterval(chatInterval);
@@ -1576,7 +1501,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function startPolling() {
         clearInterval(chatInterval);
-        chatInterval = setInterval(loadMessages, 3000);
+        chatInterval = setInterval(() => {
+            if (currentChatRideId) loadChatMessages(currentChatRideId);
+        }, 3000);
     }
 
     // Add Enter key listener for chat input
