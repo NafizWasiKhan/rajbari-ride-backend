@@ -60,21 +60,6 @@ class InitiatePaymentView(APIView):
                 payment.transaction_id = init_data['transaction_id']
                 payment.save()
             
-            # Broadcast PAID status early for CASH to notify driver immediately
-            if method == 'CASH':
-                from channels.layers import get_channel_layer
-                from asgiref.sync import async_to_sync
-                layer = get_channel_layer()
-                async_to_sync(layer.group_send)(
-                    f"ride_{ride.id}",
-                    {
-                        "type": "ride_status_update",
-                        "status": "PAID",
-                        "ride_id": ride.id,
-                        "amount_paid": float(amount_paid)
-                    }
-                )
-
             # If it's CASH, we do NOT finish yet. We wait for Driver Confirmation.
             if method == 'CASH':
                 # Notify Driver to Confirm
@@ -243,6 +228,19 @@ class ConfirmCashPaymentView(APIView):
         # Process the payment success
         # This updates Payment -> COMPLETED, Ride -> FINISHED, and adds Transaction
         PaymentService.process_payment_success(payment.id)
+        
+        # Broadcast FINISHED status to both driver and passenger
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        layer = get_channel_layer()
+        async_to_sync(layer.group_send)(
+            f"ride_{ride.id}",
+            {
+                "type": "ride_status_update",
+                "status": "FINISHED",
+                "ride_id": ride.id
+            }
+        )
         
         return Response({
             "status": "SUCCESS",

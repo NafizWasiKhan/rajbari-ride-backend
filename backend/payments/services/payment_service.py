@@ -45,7 +45,18 @@ class PaymentService:
                 if payment.provider == 'CASH':
                     # For CASH, the driver already has the money physically.
                     # We do NOT add to wallet.balance.
-                    # We only log the transaction for reporting (Total Income).
+                    # But we DO create EARNING transaction for statistics/reporting.
+                    
+                    # Create EARNING transaction for total income tracking
+                    Transaction.objects.create(
+                        wallet=wallet,
+                        amount=driver_earning,
+                        transaction_type='EARNING',
+                        ride=ride,
+                        payment=payment,
+                        description=f"Cash earning from Ride #{ride.id}"
+                    )
+                    
                     wallet.save()
 
                     if PaymentService.COMMISSION_RATE > 0:
@@ -100,8 +111,8 @@ class PaymentService:
                     description=f"Payment for Ride #{ride.id} ({payment.provider})"
                 )
 
-            # 5. Mark Ride as PAID
-            ride.status = 'PAID'
+            # 5. Mark Ride as FINISHED (payment completed and confirmed)
+            ride.status = 'FINISHED'
             ride.save()
 
     @staticmethod
