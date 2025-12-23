@@ -47,10 +47,10 @@ class PaymentService:
                     # We do NOT add to wallet.balance.
                     # But we DO create EARNING transaction for statistics/reporting.
                     
-                    # Create EARNING transaction for total income tracking
+                    # Create EARNING transaction for total income tracking (Gross)
                     Transaction.objects.create(
                         wallet=wallet,
-                        amount=driver_earning,
+                        amount=total_fare,
                         transaction_type='EARNING',
                         ride=ride,
                         payment=payment,
@@ -59,9 +59,8 @@ class PaymentService:
                     
                     wallet.save()
 
-                    if PaymentService.COMMISSION_RATE > 0:
-                        # Only if commission is enabled, we verify/deduct from wallet
-                        commission_amount = payment.amount * PaymentService.COMMISSION_RATE
+                    if commission_amount > 0:
+                        # Deduct commission from wallet balance (since they got full cash)
                         wallet.balance -= commission_amount
                         wallet.save()
 
@@ -75,29 +74,30 @@ class PaymentService:
                             description=f"Commission deduction for cash Ride #{ride.id}"
                         )
                 else:
-                    # For Digital (DEMO, BKASH, etc), we credit the driver's wallet
+                    # For Digital (DEMO, BKASH, etc), we credit the driver's wallet (Net)
                     wallet.balance += driver_earning
                     wallet.save()
 
-                    # Transaction for System Commission (Record)
+                    # Driver Earning Record (Gross)
                     Transaction.objects.create(
                         wallet=wallet,
-                        amount=commission_amount,
-                        transaction_type='COMMISSION',
-                        ride=ride,
-                        payment=payment,
-                        description=f"Platform fee for Ride #{ride.id} (Digital)"
-                    )
-
-                    # Driver Earning Record
-                    Transaction.objects.create(
-                        wallet=wallet,
-                        amount=driver_earning,
+                        amount=total_fare,
                         transaction_type='EARNING',
                         ride=ride,
                         payment=payment,
-                        description=f"Earning from Ride #{ride.id}"
+                        description=f"Earning from Digital Ride #{ride.id}"
                     )
+
+                    # Transaction for System Commission (Deduction record)
+                    if commission_amount > 0:
+                        Transaction.objects.create(
+                            wallet=wallet,
+                            amount=-commission_amount,
+                            transaction_type='COMMISSION',
+                            ride=ride,
+                            payment=payment,
+                            description=f"Platform fee for Digital Ride #{ride.id}"
+                        )
 
             # 4. Update Rider Transaction History
             if ride.rider:

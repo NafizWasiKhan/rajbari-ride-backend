@@ -196,10 +196,10 @@ class WalletStatsView(APIView):
         } for t in transactions]
         
         return Response({
-            'total_income': float(total_earnings),
-            'wallet_balance': float(wallet.balance),
+            'total_earnings': float(total_earnings),
+            'balance': float(wallet.balance),
             'total_spent': float(total_spent),
-            'recent_transactions': transactions_data
+            'history': transactions_data
         })
 
 class ConfirmCashPaymentView(APIView):
@@ -220,10 +220,9 @@ class ConfirmCashPaymentView(APIView):
             return Response({"error": "Only the assigned driver can confirm payment."}, 
                             status=status.HTTP_403_FORBIDDEN)
                             
-        # Find the PENDING cash payment
-        payment = Payment.objects.filter(ride=ride, status='PENDING', provider='DEMO').first() 
-        # Note: Provider might be 'CASH' or 'DEMO' depending on factory.
-        # Let's check generally for pending payment
+        # Find the PENDING payment (prefer CASH provider if it exists)
+        payment = Payment.objects.filter(ride=ride, status='PENDING', provider='CASH').first()
+        
         if not payment:
             payment = Payment.objects.filter(ride=ride, status='PENDING').first()
             
