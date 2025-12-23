@@ -918,6 +918,35 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             // Do NOT cleanup yet! We stay in PAID until driver confirms.
 
+        } else if (status === 'PAYMENT_PENDING') {
+            const isDriver = currentUser && currentUser.profile.role === 'DRIVER';
+            if (statusContainer) statusContainer.style.display = 'block';
+
+            if (isDriver) {
+                if (text) text.innerText = "Cash Payment Reported!";
+                if (jobStatusText) {
+                    const amountMsg = details.amount_paid ? ` ${details.amount_paid} BDT` : '';
+                    jobStatusText.innerHTML = `<div style="color: #f39c12; font-weight: 800;"><i class="fas fa-exclamation-circle"></i> Passenger says they paid${amountMsg}. Confirm?</div>`;
+                }
+                const confirmBtn = document.getElementById('job-confirm-finish-btn');
+                const finishBtn = document.getElementById('job-finish-btn');
+
+                if (confirmBtn) {
+                    confirmBtn.style.display = 'block';
+                    confirmBtn.innerText = "CONFIRM CASH RECEIVED";
+                    confirmBtn.style.background = "#27ae60"; // Green for confirm
+
+                    let safeRideId = details.id || details.ride_id || currentChatRideId;
+                    if (safeRideId) {
+                        confirmBtn.onclick = () => confirmCashReceipt(safeRideId);
+                    }
+                }
+                if (finishBtn) finishBtn.style.display = 'none';
+            } else {
+                if (text) text.innerText = "Waiting for driver to confirm payment...";
+                if (payNowBtn) payNowBtn.style.display = "none";
+            }
+
         } else if (status === 'FINISHED') {
             if (text) text.innerText = "Ride Finished! Thank you.";
             if (payNowBtn) payNowBtn.style.display = "none";
@@ -1500,9 +1529,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             if (response.ok) {
                 if (method === 'CASH') {
-                    alert(`Cash payment of ${amount} BDT recorded!`);
-                    updateRideStatus('PAID', { id: rideId, amount_paid: amount });
-                    fetchWalletStats();
+                    // alert(`Cash payment of ${amount} BDT recorded!`); 
+                    // No longer manually updating status to PAID. We wait for socket or response.
+                    if (data.status === 'PENDING') {
+                        alert("Cash payment request sent! Please wait for driver confirmation.");
+                        // We can force a UI update here if socket is slow
+                        updateRideStatus('PAYMENT_PENDING', { id: rideId, amount_paid: amount });
+                    }
                 } else if (data.checkout_url) {
                     window.location.href = data.checkout_url;
                 }
@@ -1847,6 +1880,30 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) {
             console.error(e);
             alert("Network error closing ride.");
+        }
+    };
+
+    window.confirmCashReceipt = async function (rideId) {
+        if (!confirm("Have you successfully RECEIVED the cash from the passenger?")) return;
+
+        const token = localStorage.getItem('token');
+        try {
+            const response = await fetch('/api/payments/confirm-cash/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Token ${token}` },
+                body: JSON.stringify({ ride_id: rideId })
+            });
+
+            if (response.ok) {
+                alert("Payment Confirmed! Ride Finished.");
+                fetchWalletStats();
+            } else {
+                const data = await response.json();
+                alert(data.error || "Confirmation failed");
+            }
+        } catch (e) {
+            console.error("Cash confirm failed", e);
+            alert("Network error verifying payment");
         }
     };
 

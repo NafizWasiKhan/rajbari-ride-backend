@@ -75,12 +75,31 @@ class InitiatePaymentView(APIView):
                     }
                 )
 
-            # If it's CASH, we can just finalize right here
+            # If it's CASH, we do NOT finish yet. We wait for Driver Confirmation.
             if method == 'CASH':
-                PaymentService.process_payment_success(payment.id)
+                # Notify Driver to Confirm
+                from channels.layers import get_channel_layer
+                from asgiref.sync import async_to_sync
+                layer = get_channel_layer()
+                async_to_sync(layer.group_send)(
+                    f"ride_{ride.id}",
+                    {
+                        "type": "ride_status_update",
+                        # We use a special status or just 'PAID' but with a flag? 
+                        # Let's use 'PAYMENT_PENDING' as agreed or just 'PAID' status on Ride 
+                        # but keeping Payment as PENDING.
+                        # Actually, keeping Ride as COMPLETED or similar until confirmed is safer.
+                        # But UI needs to know. Let's send a custom 'cash_pending_confirmation' event via status update.
+                        "status": "PAYMENT_PENDING", # Frontend will handle this to show 'Waiting for Driver'
+                        "ride_id": ride.id,
+                        "amount_paid": float(amount_paid),
+                        "driver_name": ride.driver.username if ride.driver else "Driver"
+                    }
+                )
+                
                 return Response({
-                    "status": "SUCCESS", 
-                    "message": "Cash payment recorded. Ride finished!",
+                    "status": "PENDING", 
+                    "message": "Cash payment recorded. Waiting for driver confirmation.",
                     "is_cash": True
                 }, status=status.HTTP_200_OK)
             
@@ -191,9 +210,41 @@ class WalletStatsView(APIView):
             "ride_id": t.ride_id if t.ride else None
         } for t in recent]
 
+
+class ConfirmCashPaymentView(APIView):
+    """
+    Allows Driver to confirm they received the CASH from the Passenger.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        ride_id = request.data.get('ride_id')
+        user = request.user
+        
+        # Verify ride exists and user is the driver
+        ride = get_object_or_404(Ride, id=ride_id)
+        
+        # Check if user is the driver
+        if ride.driver != user:
+            return Response({"error": "Only the assigned driver can confirm payment."}, 
+                            status=status.HTTP_403_FORBIDDEN)
+                            
+        # Find the PENDING cash payment
+        payment = Payment.objects.filter(ride=ride, status='PENDING', provider='DEMO').first() 
+        # Note: Provider might be 'CASH' or 'DEMO' depending on factory.
+        # Let's check generally for pending payment
+        if not payment:
+            payment = Payment.objects.filter(ride=ride, status='PENDING').first()
+            
+        if not payment:
+            return Response({"error": "No pending payment found for this ride."}, 
+                            status=status.HTTP_404_NOT_FOUND)
+                            
+        # Process the payment success
+        # This updates Payment -> COMPLETED, Ride -> FINISHED, and adds Transaction
+        PaymentService.process_payment_success(payment.id)
+        
         return Response({
-            "balance": float(wallet.balance),
-            "total_earnings": float(total_earnings),
-            "total_spent": float(total_spent),
-            "history": history
+            "status": "SUCCESS",
+            "message": "Payment confirmed. Ride finished."
         })
